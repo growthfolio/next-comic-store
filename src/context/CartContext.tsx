@@ -54,52 +54,80 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [cartItems]);
 
-  const addItem = useCallback((item: CartItem) => {
+ const addItem = useCallback((itemToAdd: CartItem) => {
+    let itemExists = false;
     setCartItems((prevItems) => {
-      const existingItemIndex = prevItems.findIndex(i => i.id === item.id);
+      const existingItemIndex = prevItems.findIndex(i => i.id === itemToAdd.id);
       if (existingItemIndex > -1) {
-        // Item already exists, increase quantity
+        itemExists = true; // Mark that item existed
         const updatedItems = [...prevItems];
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + item.quantity,
+          quantity: updatedItems[existingItemIndex].quantity + itemToAdd.quantity,
         };
-        toast({ title: `${item.title} quantity updated in cart.` });
         return updatedItems;
       } else {
-        // Add new item
-        toast({ title: `${item.title} added to cart.` });
-        return [...prevItems, item];
+        itemExists = false; // Mark that item is new
+        return [...prevItems, itemToAdd];
       }
     });
-  }, [toast]);
+
+    // Call toast *after* the state update is queued
+    if (itemExists) {
+        toast({ title: `${itemToAdd.title} quantity updated in cart.` });
+    } else {
+        toast({ title: `${itemToAdd.title} added to cart.` });
+    }
+  }, [toast]); // Dependency array is correct
+
 
   const removeItem = useCallback((itemId: string) => {
+    let removedItemTitle: string | null = null;
     setCartItems((prevItems) => {
-        const itemToRemove = prevItems.find(i => i.id === itemId);
-        if (itemToRemove) {
-            toast({ title: `${itemToRemove.title} removed from cart.`, variant: 'destructive' });
-        }
-        return prevItems.filter(item => item.id !== itemId);
+      const itemToRemove = prevItems.find(i => i.id === itemId);
+      if (itemToRemove) {
+          removedItemTitle = itemToRemove.title; // Store title for toast
+      }
+      return prevItems.filter(item => item.id !== itemId);
     });
-  }, [toast]);
+
+    // Call toast *after* the state update is queued
+    if (removedItemTitle) {
+        toast({ title: `${removedItemTitle} removed from cart.`, variant: 'destructive' });
+    }
+  }, [toast]); // Dependency array is correct
+
 
   const updateQuantity = useCallback((itemId: string, quantity: number) => {
     setCartItems((prevItems) => {
+       const itemToUpdate = prevItems.find(item => item.id === itemId);
+       let updatedItems = prevItems;
+
       if (quantity <= 0) {
         // Remove item if quantity is 0 or less
-        return prevItems.filter(item => item.id !== itemId);
+        updatedItems = prevItems.filter(item => item.id !== itemId);
+        if (itemToUpdate) {
+             // Call toast *after* calculation, before returning state
+             // This seems acceptable as it's not directly inside the state setter update function logic like before
+            // toast({ title: `${itemToUpdate.title} removed from cart.`, variant: 'destructive' }); // Potentially noisy, removing for now
+        }
+      } else {
+          updatedItems = prevItems.map(item =>
+             item.id === itemId ? { ...item, quantity } : item
+           );
       }
-      return prevItems.map(item =>
-        item.id === itemId ? { ...item, quantity } : item
-      );
+      return updatedItems; // Return the new state
     });
-  }, []);
+     // Toast for quantity update could be added here if needed, but might be too noisy.
+  }, []); // Removed toast dependency as it's not called here
 
-  const clearCart = useCallback(() => {
-    setCartItems([]);
+
+ const clearCart = useCallback(() => {
+    setCartItems([]); // Queue state update
+    // Call toast *after* state update is queued
     toast({ title: 'Cart Cleared' });
-  }, [toast]);
+  }, [toast]); // Dependency array is correct
+
 
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
