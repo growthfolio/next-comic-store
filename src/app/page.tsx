@@ -17,9 +17,12 @@ function HomePageContent() {
   const { toast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth(); // Get user state
   const { addItem } = useCart(); // Get addItem function
+
+  // Fetch comics from the API using useQuery
   const { data: comics, isLoading: isComicsLoading, error } = useQuery<Comic[], Error>({
-    queryKey: ['comics'],
-    queryFn: getComics,
+    queryKey: ['comics'], // react-query key
+    queryFn: getComics, // The function to fetch data
+    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
   });
 
   const handleAddToCart = (comic: Comic) => {
@@ -62,14 +65,12 @@ function HomePageContent() {
   }
 
   if (error) {
-    toast({
-      title: 'Error loading comics',
-      description: error.message,
-      variant: 'destructive',
-    });
+    // Toast is handled by the onError callback in useQuery by default, but we can add specific handling here if needed.
+    // We'll display a message on the page as well.
+    console.error("Error fetching comics:", error);
     return (
       <div className="container mx-auto px-4 py-8 text-center text-destructive">
-        Failed to load comics. Please try again later.
+        Failed to load comics. Please try refreshing the page. ({error.message})
       </div>
     );
   }
@@ -88,43 +89,48 @@ function HomePageContent() {
 
       <h1 className="text-3xl font-bold mb-8 text-center">Featured Comics</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {comics?.slice(0, 4).map((comic) => ( // Displaying only first 4 as samples
-          <Card key={comic.id} className="overflow-hidden shadow-lg rounded-lg flex flex-col">
-            <div className="relative w-full h-60">
-              <Image
-                src={comic.imageUrl || `https://picsum.photos/seed/${comic.id}/400/600`}
-                alt={comic.title}
-                fill
-                style={{objectFit: 'cover'}}
-                className="rounded-t-lg"
-                data-ai-hint="comic book cover"
-                sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                priority={comics.indexOf(comic) < 2} // Prioritize loading first few images
-              />
-            </div>
-            <CardHeader className="flex-grow">
-              <CardTitle className="text-lg font-semibold">{comic.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <p className="text-muted-foreground text-sm mb-2">Category: {comic.category}</p>
-               <p className="font-bold text-accent-foreground bg-accent inline-block px-2 py-1 rounded">${comic.price.toFixed(2)}</p>
-            </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 mt-auto pt-4">
-               <Link href={`/comics/${comic.id}`} passHref legacyBehavior>
-                <Button variant="secondary" className="w-full sm:w-auto flex-1">Details</Button>
-              </Link>
-               {/* Add to Cart Button */}
-               <Button
-                variant="outline"
-                className="w-full sm:w-auto flex-1"
-                onClick={() => handleAddToCart(comic)}
-                aria-label={`Add ${comic.title} to cart`}
-              >
-                 Add to Cart
-               </Button>
-            </CardFooter>
-          </Card>
-        ))}
+        {/* Displaying only first 4 as samples - Ensure comics is not undefined */}
+        {comics && comics.length > 0 ? (
+            comics.slice(0, 4).map((comic, index) => ( // Added index for priority
+              <Card key={comic.id} className="overflow-hidden shadow-lg rounded-lg flex flex-col">
+                <div className="relative w-full h-60">
+                  <Image
+                    src={comic.imageUrl || `https://picsum.photos/seed/${comic.id}/400/600`}
+                    alt={comic.title}
+                    fill
+                    style={{objectFit: 'cover'}}
+                    className="rounded-t-lg"
+                    data-ai-hint="comic book cover"
+                    sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    priority={index < 2} // Prioritize loading first few images
+                  />
+                </div>
+                <CardHeader className="flex-grow">
+                  <CardTitle className="text-lg font-semibold">{comic.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                   <p className="text-muted-foreground text-sm mb-2">Category: {comic.category}</p>
+                   <p className="font-bold text-accent-foreground bg-accent inline-block px-2 py-1 rounded">${comic.price.toFixed(2)}</p>
+                </CardContent>
+                <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 mt-auto pt-4">
+                   <Link href={`/comics/${comic.id}`} passHref legacyBehavior>
+                    <Button variant="secondary" className="w-full sm:w-auto flex-1">Details</Button>
+                  </Link>
+                   {/* Add to Cart Button */}
+                   <Button
+                    variant="outline"
+                    className="w-full sm:w-auto flex-1"
+                    onClick={() => handleAddToCart(comic)}
+                    aria-label={`Add ${comic.title} to cart`}
+                  >
+                     Add to Cart
+                   </Button>
+                </CardFooter>
+              </Card>
+            ))
+        ) : (
+            <p className="col-span-full text-center text-muted-foreground">No comics available at the moment.</p>
+        )}
       </div>
        <div className="text-center mt-12 space-x-4">
            <Link href="/gallery" passHref legacyBehavior>

@@ -12,15 +12,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { uploadImage } from '@/services/comic-service'; // Keep uploadImage
-// Remove submitCustomComicOrder import, we'll add to cart instead
-// import { submitCustomComicOrder, type CustomComicOrder } from '@/services/comic-service';
+import { uploadImage } from '@/services/comic-service'; // Use the updated service
 import { useToast } from '@/hooks/use-toast';
 import { useCart } from '@/hooks/useCart'; // Import useCart
 import { Loader2, Upload, ShoppingCart } from 'lucide-react';
 
 const formSchema = z.object({
-  imageFile: z.instanceof(File).optional().refine(file => file !== undefined, "An image is required."),
+  // Image file is required
+  imageFile: z.instanceof(File).refine(file => file !== undefined && file.size > 0, "An image file is required."),
   notes: z.string().optional(),
 });
 
@@ -37,78 +36,80 @@ function CustomizePageContent() {
   const { addItem } = useCart(); // Get addItem function
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isAddingToCart, setIsAddingToCart] = useState(false); // Changed state name
+  const [isSubmitting, setIsSubmitting] = useState(false); // General submitting state
 
   const form = useForm<CustomizationFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       notes: '',
+      imageFile: undefined, // Explicitly default to undefined
     },
+     mode: "onChange", // Validate on change for better UX
   });
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      form.setValue('imageFile', file);
+      form.setValue('imageFile', file, { shouldValidate: true }); // Validate after setting value
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
     } else {
-      form.setValue('imageFile', undefined);
+      form.setValue('imageFile', undefined, { shouldValidate: true }); // Validate after clearing
       setPreviewUrl(null);
     }
-     form.trigger('imageFile'); // Trigger validation after file selection
+     // No need to manually trigger, setValue with shouldValidate handles it if mode is onChange/onBlur
   };
 
-  // Renamed function
-  const onAddToCart: SubmitHandler<CustomizationFormData> = async (data) => {
+  // Renamed function for clarity
+  const onSubmitCustomization: SubmitHandler<CustomizationFormData> = async (data) => {
+    // Schema validation already ensures imageFile exists here
     if (!data.imageFile) {
-       form.setError('imageFile', { message: 'Please upload an image.' });
-       return;
+      // This case should ideally not be hit due to zod refinement, but as a safeguard:
+      toast({ title: 'Error', description: 'Image file is missing.', variant: 'destructive'});
+      return;
     }
 
     setIsUploading(true);
-    setIsAddingToCart(true); // Start loading state
-    let imageUrl = '';
+    setIsSubmitting(true); // Start general loading state
+    let uploadedImageUrl = '';
+
     try {
-      // Still upload the image first
-      imageUrl = await uploadImage(data.imageFile);
-      toast({ title: 'Image Uploaded Successfully', description: 'Adding custom comic to cart...' });
+      // Upload the image using the API service
+      uploadedImageUrl = await uploadImage(data.imageFile);
+      toast({ title: 'Image Uploaded Successfully', description: 'Preparing custom comic...' });
     } catch (error) {
       console.error('Image upload failed:', error);
       toast({
         title: 'Image Upload Failed',
-        description: 'Could not upload your image. Please try again.',
+        description: (error as Error).message || 'Could not upload your image. Please try again.',
         variant: 'destructive',
       });
       setIsUploading(false);
-      setIsAddingToCart(false); // Stop loading state
+      setIsSubmitting(false); // Stop loading state
       return;
     } finally {
-      setIsUploading(false); // Stop upload-specific loading
+      setIsUploading(false); // Stop upload-specific loading indicator
     }
 
-    // Create a unique ID for the custom cart item (e.g., using timestamp or UUID)
+    // Create a unique ID for the custom cart item
     const customItemId = `custom-${Date.now()}`;
 
-    // Add the custom item details to the cart
+    // Add the custom item details to the cart using the context
     addItem({
         id: customItemId,
-        title: `Custom Comic ${comicId ? `(Based on ${comicId})` : ''}`, // More descriptive title
+        title: `Custom Comic ${comicId ? `(Based on ID ${comicId.substring(0,5)}...)` : ''}`, // More descriptive title
         price: CUSTOM_COMIC_PRICE, // Use the defined price
         quantity: 1,
-        imageUrl: imageUrl, // Use the uploaded image URL
+        imageUrl: uploadedImageUrl, // Use the URL returned by the API
         isCustom: true,
         notes: data.notes,
     });
 
-    setIsAddingToCart(false); // Stop loading state
-    toast({
-        title: 'Custom Comic Added to Cart!',
-        description: 'Your custom comic request has been added to your cart.',
-    });
+    setIsSubmitting(false); // Stop general loading state
+    // Toast for adding to cart is handled by the addItem function in CartContext
 
     // Redirect to the cart page after adding
     router.push('/cart');
@@ -123,32 +124,41 @@ function CustomizePageContent() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onAddToCart)} className="space-y-6"> {/* Use onAddToCart */}
+            {/* Ensure onSubmit uses the correct handler */}
+            <form onSubmit={form.handleSubmit(onSubmitCustomization)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="imageFile"
-                render={({ field }) => (
+                render={({ field }) => ( // field doesn't have value for file input, use onChange handler
                   <FormItem>
-                    <FormLabel htmlFor="image-upload" className="flex items-center gap-2 cursor-pointer text-primary font-semibold hover:underline">
+                    <FormLabel
+                        htmlFor="image-upload"
+                        className={cn(
+                            "flex items-center gap-2 cursor-pointer text-primary font-semibold hover:underline",
+                            (isUploading || isSubmitting) && "cursor-not-allowed opacity-50"
+                        )}
+                    >
                       <Upload className="h-5 w-5" />
-                      Upload Image
+                      {previewUrl ? 'Change Image' : 'Upload Image *'}
                     </FormLabel>
                     <FormControl>
                       <Input
                         id="image-upload"
                         type="file"
                         accept="image/*"
+                        // Use custom onChange handler instead of field.onChange
                         onChange={handleImageChange}
-                        className="hidden"
-                        disabled={isUploading || isAddingToCart}
+                        // ref={field.ref} // Keep ref if needed, but value/onChange are handled differently
+                        className="hidden" // Hide the default input
+                        disabled={isUploading || isSubmitting}
                       />
                     </FormControl>
                     <FormDescription>
-                      Upload a picture from your gallery or camera. This will be used for your custom comic.
+                      * Required. Upload a picture for your custom comic.
                     </FormDescription>
                     <FormMessage />
                     {previewUrl && (
-                      <div className="mt-4 border rounded-lg overflow-hidden w-full aspect-square max-w-xs mx-auto relative">
+                      <div className="mt-4 border rounded-lg overflow-hidden w-full aspect-square max-w-xs mx-auto relative bg-muted/50">
                         <Image src={previewUrl} alt="Image Preview" layout="fill" objectFit="contain" />
                       </div>
                     )}
@@ -173,7 +183,7 @@ function CustomizePageContent() {
                         placeholder="Any special instructions? (e.g., character pose, background details, speech bubbles)"
                         {...field}
                         rows={4}
-                        disabled={isUploading || isAddingToCart}
+                        disabled={isUploading || isSubmitting}
                       />
                     </FormControl>
                     <FormDescription>
@@ -185,11 +195,12 @@ function CustomizePageContent() {
               />
 
               <CardFooter className="p-0 pt-6">
-                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isUploading || isAddingToCart}>
-                  {isAddingToCart ? ( // Check isAddingToCart state
+                 {/* Ensure button uses the correct loading state */}
+                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isUploading || isSubmitting || !form.formState.isValid}>
+                  {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Adding to Cart...
+                      {isUploading ? 'Uploading...' : 'Adding to Cart...'}
                     </>
                   ) : (
                     <>

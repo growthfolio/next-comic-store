@@ -18,17 +18,28 @@ import { Search, Filter, ShoppingCart } from 'lucide-react';
 function GalleryPageContent() {
   const { toast } = useToast();
   const { addItem } = useCart(); // Get addItem function
+
+  // Fetch comics from API using useQuery
   const { data: comics, isLoading, error } = useQuery<Comic[], Error>({
-    queryKey: ['comics'],
+    queryKey: ['comics'], // Consistent query key with homepage
     queryFn: getComics,
+    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
+    // No need for onError here unless specific action is needed, useQuery handles global errors
   });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [filteredComics, setFilteredComics] = useState<Comic[]>([]);
+  const [categories, setCategories] = useState<string[]>(['all']);
 
-  // Extract unique categories for filtering
-  const categories = ['all', ...new Set(comics?.map(comic => comic.category) || [])];
+   // Derive categories once comics data is available
+   useEffect(() => {
+     if (comics) {
+       const uniqueCategories = ['all', ...new Set(comics.map(comic => comic.category))];
+       setCategories(uniqueCategories);
+     }
+   }, [comics]);
+
 
    // Filter comics based on search term and category
   useEffect(() => {
@@ -49,7 +60,7 @@ function GalleryPageContent() {
 
       setFilteredComics(tempComics);
     } else {
-      setFilteredComics([]);
+      setFilteredComics([]); // Ensure it's an empty array if comics are not loaded
     }
   }, [comics, searchTerm, selectedCategory]);
 
@@ -98,14 +109,11 @@ function GalleryPageContent() {
   }
 
   if (error) {
-    toast({
-      title: 'Error loading comics',
-      description: error.message,
-      variant: 'destructive',
-    });
+    // Error is handled by useQuery, display message on page
+    console.error("Error fetching comics for gallery:", error);
     return (
       <div className="container mx-auto px-4 py-8 text-center text-destructive">
-        Failed to load comics gallery. Please try again later.
+        Failed to load comics gallery. Please try refreshing the page. ({error.message})
       </div>
     );
   }

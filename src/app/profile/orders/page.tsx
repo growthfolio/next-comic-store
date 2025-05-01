@@ -2,7 +2,7 @@
 'use client';
 
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -15,8 +15,41 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { getUserOrders, type UserOrder, type OrderItem } from '@/services/order-service';
-import { Loader2, ShoppingBag, Package } from 'lucide-react';
+import { getUserOrders, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service'; // Import getUserOrders
+import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw } from 'lucide-react'; // Added icons for status
+
+// Status Badge Component (similar to admin panel, reuse or abstract later)
+const StatusBadge = ({ status }: { status: OrderStatus }) => {
+    let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
+    let icon = <Info className="h-3 w-3 mr-1" />;
+
+    switch (status) {
+        case 'Pending':
+            variant = "outline";
+            icon = <RefreshCcw className="h-3 w-3 mr-1 animate-spin animation-duration-2000" />;
+            break;
+        case 'In Production':
+            variant = "default"; // Using primary color
+             icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
+            break;
+        case 'Completed':
+            variant = "secondary"; // Using accent color via theme
+             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />; // Specific color for check
+            break;
+         case 'Cancelled':
+            variant = "destructive";
+            icon = <AlertTriangle className="h-3 w-3 mr-1" />;
+            break;
+    }
+
+    return (
+        <Badge variant={variant} className="flex items-center text-xs whitespace-nowrap capitalize">
+            {icon}
+            {status}
+        </Badge>
+    );
+};
+
 
 function OrderItemDisplay({ item }: { item: OrderItem }) {
   return (
@@ -29,7 +62,7 @@ function OrderItemDisplay({ item }: { item: OrderItem }) {
             fill
             style={{ objectFit: 'cover' }}
             className="rounded"
-            data-ai-hint="comic book small order"
+            data-ai-hint={item.isCustom ? "user uploaded custom comic image small" : "comic book small order"}
             sizes="48px"
           />
         ) : (
@@ -71,13 +104,14 @@ function OrdersPageContent() {
 
 
   // Fetch orders using useQuery, enabled only when user is loaded and exists
-  const { data: orders, isLoading: isOrdersLoading, error } = useQuery<UserOrder[], Error>({
+  const { data: orders, isLoading: isOrdersLoading, error, isError } = useQuery<UserOrder[], Error>({
     queryKey: ['userOrders', user?.email], // Include user identifier in query key
     queryFn: () => {
       if (!user) throw new Error("User not authenticated"); // Should not happen due to protection, but for type safety
-      return getUserOrders(user.email); // Fetch orders for the logged-in user
+      return getUserOrders(user.email); // Fetch orders for the logged-in user via API
     },
     enabled: !!user && !isAuthLoading, // Only run query if user is loaded and exists
+    staleTime: 1000 * 60 * 2, // Cache user orders for 2 minutes
   });
 
 
@@ -86,6 +120,7 @@ function OrdersPageContent() {
     return (
       <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+         <span className="ml-4 text-muted-foreground">Verifying user...</span>
       </div>
     );
   }
@@ -99,35 +134,31 @@ function OrdersPageContent() {
     );
   }
 
-  // Order Loading/Error State
+  // Order Loading State
    if (isOrdersLoading) {
      return (
         <div className="container mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold mb-6">My Orders</h1>
-          <div className="space-y-6">
-            {[...Array(3)].map((_, index) => (
-               <Card key={index} className="shadow-md">
-                 <CardHeader>
-                   <Skeleton className="h-6 w-1/2 mb-1" />
-                   <Skeleton className="h-4 w-1/3" />
-                 </CardHeader>
-                 <CardContent>
-                    <Skeleton className="h-16 w-full mb-2" />
-                    <Skeleton className="h-16 w-full" />
-                 </CardContent>
-                 <CardFooter>
-                   <Skeleton className="h-6 w-1/4 ml-auto" />
-                 </CardFooter>
-               </Card>
-            ))}
-          </div>
+          <h1 className="text-2xl font-bold mb-6 text-center">My Orders</h1>
+           <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">Loading your orders...</span>
+           </div>
+          {/* Optional: Skeleton can be added back here if preferred */}
         </div>
      );
    }
 
-   if (error) {
-     toast({ title: 'Error loading orders', description: error.message, variant: 'destructive' });
-     return <div className="container mx-auto px-4 py-8 text-destructive text-center">Failed to load orders.</div>;
+   // Order Error State
+   if (isError) {
+     console.error("Error fetching user orders:", error);
+     return (
+        <div className="container mx-auto px-4 py-8 text-destructive text-center">
+            <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
+            <p className="text-lg font-semibold mb-2">Failed to load your orders.</p>
+            <p className="text-muted-foreground">({error.message})</p>
+             <Button variant="link" onClick={() => router.refresh()} className="mt-4">Try Again</Button>
+        </div>
+     );
    }
 
    // Main Content
@@ -143,12 +174,15 @@ function OrdersPageContent() {
               <CardHeader className="bg-muted/50 p-4 border-b">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                     <div>
-                        <CardTitle className="text-lg">Order ID: {order.id.substring(0, 15)}...</CardTitle>
-                        <CardDescription className="text-sm">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                             <span>Order ID: {order.id.substring(0, 15)}...</span>
+                             <StatusBadge status={order.status} />
+                        </CardTitle>
+                        <CardDescription className="text-sm mt-1">
                            Placed on: {format(new Date(order.date), 'PPP p')} {/* Format date */}
                         </CardDescription>
                     </div>
-                    <p className="text-lg font-semibold text-right sm:text-left">
+                    <p className="text-lg font-semibold text-right sm:text-left mt-2 sm:mt-0">
                          Total: ${order.totalPrice.toFixed(2)}
                      </p>
                 </div>
@@ -181,6 +215,6 @@ function OrdersPageContent() {
 
 
 export default function OrdersPage() {
-  // Providers wrapper handles context
+  // Providers wrapper handles context and query client
   return <OrdersPageContent />;
 }

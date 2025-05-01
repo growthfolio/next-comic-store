@@ -21,14 +21,15 @@ export async function getComics(): Promise<Comic[]> {
   try {
     const response = await fetch('/api/products'); // Fetch from the new API endpoint
     if (!response.ok) {
-      throw new Error(`Failed to fetch comics: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+      throw new Error(`Failed to fetch comics: ${response.statusText} - ${errorData.message || 'No additional error info'}`);
     }
     const data = await response.json();
     return data as Comic[];
   } catch (error) {
       console.error("Error in getComics:", error);
-      // Optionally return empty array or re-throw specific error type
-      return []; // Return empty array on error to avoid breaking UI components expecting an array
+      // Re-throw the error so react-query can handle it
+      throw error;
   }
 }
 
@@ -43,15 +44,18 @@ export async function getComicById(id: string): Promise<Comic | null> {
         const response = await fetch(`/api/products/${id}`); // Fetch from the specific product API endpoint
         if (!response.ok) {
             if (response.status === 404) {
+                console.log(`Comic with ID ${id} not found (404).`);
                 return null; // Comic not found
             }
-            throw new Error(`Failed to fetch comic ${id}: ${response.statusText}`);
+            const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+            throw new Error(`Failed to fetch comic ${id}: ${response.statusText} - ${errorData.message || 'No additional error info'}`);
         }
         const data = await response.json();
         return data as Comic;
     } catch (error) {
         console.error(`Error in getComicById (${id}):`, error);
-        return null; // Return null on error
+        // Re-throw the error for react-query
+        throw error;
     }
 }
 
@@ -73,10 +77,10 @@ export interface CustomComicOrder {
  * @returns A promise that resolves when the order is successfully submitted.
  */
 export async function submitCustomComicOrder(order: CustomComicOrder): Promise<void> {
-  console.warn('submitCustomComicOrder is deprecated. Use addOrder via the /api/orders endpoint.');
-  // This function's logic should be integrated into the checkout process that calls POST /api/orders
-  // For now, just log a warning.
-  await new Promise(resolve => setTimeout(resolve, 100)); // Simulate quick operation
+  console.warn('submitCustomComicOrder is deprecated. Custom items are added to cart first, then submitted via addOrder during checkout.');
+  // This function's logic is now handled by adding the custom item to the cart
+  // and then calling addOrder during the checkout process.
+  await new Promise(resolve => setTimeout(resolve, 50)); // Simulate quick operation
   return;
 }
 
@@ -94,10 +98,12 @@ export async function uploadImage(image: File): Promise<string> {
     const response = await fetch('/api/upload', {
       method: 'POST',
       body: formData,
+      // Do not set Content-Type header manually when using FormData,
+      // the browser will set it correctly with the boundary.
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Unknown upload error' }));
+      const errorData = await response.json().catch(() => ({ message: 'Unknown upload error or non-JSON response' }));
       throw new Error(`Image upload failed: ${response.statusText} - ${errorData.message}`);
     }
 
@@ -109,6 +115,6 @@ export async function uploadImage(image: File): Promise<string> {
     return result.imageUrl;
   } catch (error) {
       console.error("Error in uploadImage:", error);
-      throw error; // Re-throw the error to be handled by the calling component
+      throw error; // Re-throw the error to be handled by the calling component/hook
   }
 }

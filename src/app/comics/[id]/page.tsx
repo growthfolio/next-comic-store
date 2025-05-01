@@ -7,11 +7,11 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getComics, type Comic } from '@/services/comic-service';
+import { getComicById, type Comic } from '@/services/comic-service'; // Use getComicById
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { useCart } from '@/hooks/useCart'; // Import useCart
-import { ArrowLeft, ShoppingCart, Pencil } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Pencil, AlertTriangle } from 'lucide-react';
 
 function ComicDetailsPageContent() {
   const params = useParams();
@@ -20,15 +20,14 @@ function ComicDetailsPageContent() {
   const { addItem } = useCart(); // Get addItem function
   const comicId = params.id as string;
 
-   // Fetch all comics and then filter, or modify getComics to fetch by ID if possible
-  const { data: comics, isLoading, error } = useQuery<Comic[], Error>({
-    queryKey: ['comics', comicId], // Include comicId in key if filtering client-side
-    queryFn: getComics,
+   // Fetch the specific comic by ID using useQuery
+  const { data: comic, isLoading, error, isError } = useQuery<Comic | null, Error>({
+    queryKey: ['comic', comicId], // Query key includes the comic ID
+    queryFn: () => getComicById(comicId), // Fetch function using the ID
     enabled: !!comicId, // Only run query if comicId exists
+    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
   });
 
-  // Find the specific comic from the fetched list
-  const comic = comics?.find(c => c.id === comicId);
 
    const handleAddToCart = () => {
     if (comic) {
@@ -40,6 +39,13 @@ function ComicDetailsPageContent() {
             imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`,
             isCustom: false,
         });
+         // Toast is now handled in CartContext
+    } else {
+         toast({
+            title: 'Error adding to cart',
+            description: 'Comic details not available.',
+            variant: 'destructive',
+         });
     }
   };
 
@@ -67,23 +73,30 @@ function ComicDetailsPageContent() {
     );
   }
 
-  if (error) {
-    toast({
-      title: 'Error loading comic details',
-      description: error.message,
-      variant: 'destructive',
-    });
+  if (isError) {
+    // Error handled by useQuery, display message
+    console.error(`Error fetching comic ${comicId}:`, error);
      return (
         <div className="container mx-auto px-4 py-8 text-center text-destructive">
-          Failed to load comic details. <Button variant="link" onClick={() => router.back()}>Go Back</Button>
+          <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
+          <p className="text-lg font-semibold mb-2">Failed to load comic details.</p>
+          <p className="text-muted-foreground mb-4">({error.message})</p>
+          <Button variant="outline" onClick={() => router.back()}>
+             <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
+          </Button>
         </div>
       );
   }
 
   if (!comic) {
+    // Handle case where comic is null (e.g., 404 from API)
     return (
         <div className="container mx-auto px-4 py-8 text-center text-muted-foreground">
-          Comic not found. <Button variant="link" onClick={() => router.back()}>Go Back</Button>
+          <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
+          <p className="text-lg font-semibold mb-4">Comic not found.</p>
+          <Button variant="outline" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Gallery
+          </Button>
         </div>
       );
   }

@@ -48,19 +48,22 @@ function CheckoutPageContent() {
 
   const handleSimulatePayment = async () => {
     if (!user) {
-        toast({ title: "Error", description: "User not found.", variant: "destructive" });
+        toast({ title: "Error", description: "User not found. Cannot place order.", variant: "destructive" });
         return;
     }
+     if (cartItems.length === 0) {
+         toast({ title: "Cart Empty", description: "Cannot checkout with an empty cart.", variant: "destructive" });
+         return;
+     }
 
     setIsProcessing(true);
-    // Simulate API call for payment processing
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+    // No separate payment simulation needed, addOrder includes API call delay
 
     try {
-        // Add order to mock order history, passing user name
+        // Call the addOrder service function which interacts with the API
         await addOrder(user.email, user.name, cartItems, total); // Use user email as ID and pass name
 
-        // Simulate success
+        // If addOrder succeeds:
         toast({
           title: 'Payment Successful!',
           description: 'Your order has been placed.',
@@ -72,7 +75,7 @@ function CheckoutPageContent() {
         console.error("Failed to add order:", error);
         toast({
           title: 'Order Failed',
-          description: 'There was an issue placing your order. Please try again.',
+          description: (error as Error).message || 'There was an issue placing your order. Please try again.',
           variant: 'destructive',
         });
     } finally {
@@ -86,6 +89,7 @@ function CheckoutPageContent() {
       return (
           <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <span className="ml-4 text-muted-foreground">{isAuthLoading ? 'Verifying user...' : 'Processing order...'}</span>
           </div>
       );
   }
@@ -123,14 +127,14 @@ function CheckoutPageContent() {
                 <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-4 last:border-b-0">
                    {/* Image */}
                    <div className="relative w-16 h-24 flex-shrink-0">
-                      {item.imageUrl && !item.isCustom ? ( // Check if custom item to decide placeholder text
+                      {item.imageUrl ? ( // Always show image if available
                            <Image
                                src={item.imageUrl}
                                alt={item.title}
                                fill
                                style={{objectFit: 'cover'}}
                                className="rounded"
-                               data-ai-hint="comic book small checkout"
+                               data-ai-hint={item.isCustom ? "user uploaded custom comic image small" : "comic book small checkout"}
                                sizes="64px"
                            />
                       ) : (
@@ -179,17 +183,17 @@ function CheckoutPageContent() {
             <Button
               onClick={handleSimulatePayment}
               className="w-full bg-accent hover:bg-accent/90"
-              disabled={isProcessing || !user} // Disable if processing or user not loaded/logged in
+              disabled={isProcessing || !user || cartItems.length === 0} // Disable if processing, no user, or empty cart
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing Payment...
+                  Placing Order...
                 </>
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Simulate Payment (${total.toFixed(2)})
+                   Place Order (${total.toFixed(2)})
                 </>
               )}
             </Button>
