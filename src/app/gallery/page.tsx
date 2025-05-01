@@ -1,27 +1,24 @@
 'use client';
 
 import type React from 'react';
-import {useEffect, useState} from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
-import {Input} from '@/components/ui/input';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
-import {getComics, type Comic} from '@/services/comic-service';
-import {Skeleton} from '@/components/ui/skeleton';
-import {useToast} from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getComics, type Comic } from '@/services/comic-service';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import { useCart } from '@/hooks/useCart'; // Import useCart
 import { Search, Filter, ShoppingCart } from 'lucide-react';
-// Remove QueryClient imports
-// import {QueryClient, QueryClientProvider, useQuery} from '@tanstack/react-query';
-import {useQuery} from '@tanstack/react-query'; // Keep useQuery
-
-// Remove QueryClient instantiation
-// const queryClient = new QueryClient();
 
 function GalleryPageContent() {
-  const {toast} = useToast();
-  const {data: comics, isLoading, error} = useQuery<Comic[], Error>({
+  const { toast } = useToast();
+  const { addItem } = useCart(); // Get addItem function
+  const { data: comics, isLoading, error } = useQuery<Comic[], Error>({
     queryKey: ['comics'],
     queryFn: getComics,
   });
@@ -56,6 +53,17 @@ function GalleryPageContent() {
     }
   }, [comics, searchTerm, selectedCategory]);
 
+  const handleAddToCart = (comic: Comic) => {
+     addItem({
+        id: comic.id,
+        title: comic.title,
+        price: comic.price,
+        quantity: 1,
+        imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`,
+        isCustom: false,
+     });
+  };
+
 
   if (isLoading) {
     return (
@@ -78,8 +86,9 @@ function GalleryPageContent() {
                 <Skeleton className="h-4 w-1/2 mb-4" />
               </CardContent>
               <CardFooter className="flex justify-between gap-2">
-                <Skeleton className="h-10 w-1/2" />
-                <Skeleton className="h-10 w-1/2" />
+                <Skeleton className="h-10 w-1/3" />
+                 <Skeleton className="h-10 w-1/3" />
+                <Skeleton className="h-10 w-1/3" />
               </CardFooter>
             </Card>
           ))}
@@ -158,23 +167,22 @@ function GalleryPageContent() {
                  <p className="font-bold text-accent-foreground bg-accent inline-block px-2 py-1 rounded">${comic.price.toFixed(2)}</p>
                </CardContent>
               <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 mt-auto pt-4">
-                {/* Link to a potential details page */}
+                {/* Link to a details page */}
                 <Link href={`/comics/${comic.id}`} passHref legacyBehavior>
-                   <Button variant="secondary" className="w-full sm:w-auto flex-1">Details</Button>
+                   <Button variant="secondary" className="w-full sm:w-auto flex-1 text-xs px-2">Details</Button>
                 </Link>
+                 {/* Add to Cart Button */}
+                 <Button
+                    variant="outline"
+                    className="w-full sm:w-auto flex-1 text-xs px-2"
+                    onClick={() => handleAddToCart(comic)}
+                    aria-label={`Add ${comic.title} to cart`}
+                 >
+                     <ShoppingCart className="h-4 w-4 mr-1" /> Add
+                 </Button>
                 <Link href={`/customize?comicId=${comic.id}`} passHref legacyBehavior>
-                  <Button variant="default" className="w-full sm:w-auto flex-1 bg-accent hover:bg-accent/90">Customize</Button>
+                  <Button variant="default" className="w-full sm:w-auto flex-1 bg-accent hover:bg-accent/90 text-xs px-2">Customize</Button>
                 </Link>
-                 {/* Add to Cart Button (Functionality to be added) */}
-                {/* <Button
-                  variant="outline"
-                  size="icon"
-                   onClick={() => toast({ title: `${comic.title} added to cart (simulation)` })}
-                  aria-label={`Add ${comic.title} to cart`}
-                  className="hidden sm:inline-flex"
-                >
-                  <ShoppingCart />
-                </Button> */}
               </CardFooter>
             </Card>
           ))}
@@ -188,7 +196,6 @@ function GalleryPageContent() {
   );
 }
 
-// Remove the wrapper component
 export default function GalleryPage() {
   return <GalleryPageContent />;
 }

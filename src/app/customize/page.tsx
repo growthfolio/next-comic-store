@@ -1,22 +1,23 @@
 'use client';
 
 import type React from 'react';
-import {useState, type ChangeEvent} from 'react';
-import {useRouter, useSearchParams} from 'next/navigation';
+import { useState, type ChangeEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import {useForm, type SubmitHandler} from 'react-hook-form';
-import {zodResolver} from '@hookform/resolvers/zod';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import {Button} from '@/components/ui/button';
-import {Input} from '@/components/ui/input';
-import {Textarea} from '@/components/ui/textarea';
-import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
-import {uploadImage, submitCustomComicOrder, type CustomComicOrder} from '@/services/comic-service';
-import {useToast} from '@/hooks/use-toast';
-import {Loader2, Upload} from 'lucide-react';
-// Remove QueryClient imports
-// import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { uploadImage } from '@/services/comic-service'; // Keep uploadImage
+// Remove submitCustomComicOrder import, we'll add to cart instead
+// import { submitCustomComicOrder, type CustomComicOrder } from '@/services/comic-service';
+import { useToast } from '@/hooks/use-toast';
+import { useCart } from '@/hooks/useCart'; // Import useCart
+import { Loader2, Upload, ShoppingCart } from 'lucide-react';
 
 const formSchema = z.object({
   imageFile: z.instanceof(File).optional().refine(file => file !== undefined, "An image is required."),
@@ -25,17 +26,18 @@ const formSchema = z.object({
 
 type CustomizationFormData = z.infer<typeof formSchema>;
 
-// Remove QueryClient instantiation
-// const queryClient = new QueryClient();
+// Define a price for custom comics (adjust as needed)
+const CUSTOM_COMIC_PRICE = 25.00;
 
 function CustomizePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const comicId = searchParams.get('comicId'); // Optional: Pre-select comic if coming from Home/Gallery
-  const {toast} = useToast();
+  const comicId = searchParams.get('comicId'); // Optional base comic ID
+  const { toast } = useToast();
+  const { addItem } = useCart(); // Get addItem function
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false); // Changed state name
 
   const form = useForm<CustomizationFormData>({
     resolver: zodResolver(formSchema),
@@ -60,18 +62,20 @@ function CustomizePageContent() {
      form.trigger('imageFile'); // Trigger validation after file selection
   };
 
-  const onSubmit: SubmitHandler<CustomizationFormData> = async (data) => {
+  // Renamed function
+  const onAddToCart: SubmitHandler<CustomizationFormData> = async (data) => {
     if (!data.imageFile) {
        form.setError('imageFile', { message: 'Please upload an image.' });
        return;
     }
 
     setIsUploading(true);
-    setIsSubmitting(true);
+    setIsAddingToCart(true); // Start loading state
     let imageUrl = '';
     try {
+      // Still upload the image first
       imageUrl = await uploadImage(data.imageFile);
-      toast({ title: 'Image Uploaded Successfully', description: 'Proceeding with order submission.' });
+      toast({ title: 'Image Uploaded Successfully', description: 'Adding custom comic to cart...' });
     } catch (error) {
       console.error('Image upload failed:', error);
       toast({
@@ -80,37 +84,34 @@ function CustomizePageContent() {
         variant: 'destructive',
       });
       setIsUploading(false);
-      setIsSubmitting(false);
+      setIsAddingToCart(false); // Stop loading state
       return;
     } finally {
-      setIsUploading(false);
+      setIsUploading(false); // Stop upload-specific loading
     }
 
-    const orderData: CustomComicOrder = {
-      image: imageUrl,
-      notes: data.notes,
-      // Optionally include comicId if needed by the backend
-      // comicId: comicId,
-    };
+    // Create a unique ID for the custom cart item (e.g., using timestamp or UUID)
+    const customItemId = `custom-${Date.now()}`;
 
-    try {
-      await submitCustomComicOrder(orderData);
-      toast({
-        title: 'Custom Comic Requested!',
-        description: 'Your custom comic order has been submitted successfully.',
-      });
-      // Redirect to a confirmation or order history page
-      router.push('/order-confirmation'); // Example redirect
-    } catch (error) {
-      console.error('Custom order submission failed:', error);
-      toast({
-        title: 'Order Submission Failed',
-        description: 'Could not submit your custom order. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Add the custom item details to the cart
+    addItem({
+        id: customItemId,
+        title: `Custom Comic ${comicId ? `(Based on ${comicId})` : ''}`, // More descriptive title
+        price: CUSTOM_COMIC_PRICE, // Use the defined price
+        quantity: 1,
+        imageUrl: imageUrl, // Use the uploaded image URL
+        isCustom: true,
+        notes: data.notes,
+    });
+
+    setIsAddingToCart(false); // Stop loading state
+    toast({
+        title: 'Custom Comic Added to Cart!',
+        description: 'Your custom comic request has been added to your cart.',
+    });
+
+    // Redirect to the cart page after adding
+    router.push('/cart');
   };
 
   return (
@@ -118,11 +119,11 @@ function CustomizePageContent() {
       <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Customize Your Comic</CardTitle>
-          <CardDescription>Upload an image and add any special instructions.</CardDescription>
+          <CardDescription>Upload an image, add notes, and add to your cart.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onAddToCart)} className="space-y-6"> {/* Use onAddToCart */}
               <FormField
                 control={form.control}
                 name="imageFile"
@@ -133,31 +134,28 @@ function CustomizePageContent() {
                       Upload Image
                     </FormLabel>
                     <FormControl>
-                       {/* Hidden actual input, triggered by label */}
                       <Input
                         id="image-upload"
                         type="file"
                         accept="image/*"
                         onChange={handleImageChange}
-                        className="hidden" // Hide the default input style
-                        disabled={isUploading || isSubmitting}
+                        className="hidden"
+                        disabled={isUploading || isAddingToCart}
                       />
                     </FormControl>
                     <FormDescription>
-                      Upload a picture from your gallery or camera.
+                      Upload a picture from your gallery or camera. This will be used for your custom comic.
                     </FormDescription>
                     <FormMessage />
-                     {/* Image Preview */}
                     {previewUrl && (
                       <div className="mt-4 border rounded-lg overflow-hidden w-full aspect-square max-w-xs mx-auto relative">
                         <Image src={previewUrl} alt="Image Preview" layout="fill" objectFit="contain" />
                       </div>
                     )}
-                     {/* Uploading indicator */}
                     {isUploading && (
                         <div className="flex items-center justify-center mt-2 text-muted-foreground">
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Uploading...
+                            Uploading Image...
                         </div>
                     )}
                   </FormItem>
@@ -172,14 +170,14 @@ function CustomizePageContent() {
                     <FormLabel>Optional Notes</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Any special instructions? (e.g., character pose, background details)"
+                        placeholder="Any special instructions? (e.g., character pose, background details, speech bubbles)"
                         {...field}
                         rows={4}
-                        disabled={isUploading || isSubmitting}
+                        disabled={isUploading || isAddingToCart}
                       />
                     </FormControl>
                     <FormDescription>
-                      Let us know any specific details you want in your comic.
+                      Let us know any specific details you want in your custom comic.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -187,14 +185,16 @@ function CustomizePageContent() {
               />
 
               <CardFooter className="p-0 pt-6">
-                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isUploading || isSubmitting}>
-                  {isSubmitting ? (
+                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isUploading || isAddingToCart}>
+                  {isAddingToCart ? ( // Check isAddingToCart state
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Submitting...
+                      Adding to Cart...
                     </>
                   ) : (
-                    'Request Custom Comic'
+                    <>
+                     <ShoppingCart className="mr-2 h-4 w-4" /> Add Custom Comic to Cart (${CUSTOM_COMIC_PRICE.toFixed(2)})
+                    </>
                   )}
                 </Button>
               </CardFooter>
@@ -206,8 +206,6 @@ function CustomizePageContent() {
   );
 }
 
-
-// Remove the wrapper component
 export default function CustomizePage() {
   return <CustomizePageContent />;
 }

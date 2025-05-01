@@ -1,32 +1,43 @@
 'use client';
 
 import type React from 'react';
-import {useEffect, useState} from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
-import {getComics, type Comic} from '@/services/comic-service'; // Assuming service returns mock data
-import {Skeleton} from '@/components/ui/skeleton';
-import {ShoppingCart} from 'lucide-react'; // Assuming CartIcon usage later
-import {useToast} from '@/hooks/use-toast';
-// Remove QueryClient imports
-// import {QueryClient, QueryClientProvider, useQuery} from '@tanstack/react-query';
-import {useQuery} from '@tanstack/react-query'; // Keep useQuery
-
-// Remove QueryClient instantiation
-// const queryClient = new QueryClient();
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { getComics, type Comic } from '@/services/comic-service';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useCart } from '@/hooks/useCart'; // Import useCart
 
 function HomePageContent() {
-  const {toast} = useToast();
-  const {data: comics, isLoading, error} = useQuery<Comic[], Error>({
+  const { toast } = useToast();
+  const { user, isLoading: isAuthLoading } = useAuth(); // Get user state
+  const { addItem } = useCart(); // Get addItem function
+  const { data: comics, isLoading: isComicsLoading, error } = useQuery<Comic[], Error>({
     queryKey: ['comics'],
     queryFn: getComics,
   });
 
-  if (isLoading) {
+  const handleAddToCart = (comic: Comic) => {
+     addItem({
+        id: comic.id,
+        title: comic.title,
+        price: comic.price,
+        quantity: 1, // Add one item at a time from here
+        imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`, // Use placeholder if no image
+        isCustom: false,
+     });
+  };
+
+
+  if (isComicsLoading || isAuthLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
+        {/* Optional: Auth loading indicator */}
+         {isAuthLoading && <Skeleton className="h-8 w-48 mb-4 mx-auto" />}
         <h1 className="text-3xl font-bold mb-8 text-center">Featured Comics</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[...Array(4)].map((_, index) => (
@@ -38,7 +49,7 @@ function HomePageContent() {
               <CardContent>
                 <Skeleton className="h-4 w-1/2 mb-4" />
               </CardContent>
-              <CardFooter className="flex justify-between gap-2">
+              <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
                 <Skeleton className="h-10 w-1/2" />
                 <Skeleton className="h-10 w-1/2" />
               </CardFooter>
@@ -64,6 +75,13 @@ function HomePageContent() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Welcome Message */}
+      {user && (
+          <div className="mb-8 p-4 bg-accent/10 border border-accent rounded-lg text-center">
+            <p className="text-lg font-medium text-accent-foreground">Welcome back, {user.name}!</p>
+          </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-8 text-center">Featured Comics</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {comics?.slice(0, 4).map((comic) => ( // Displaying only first 4 as samples
@@ -88,40 +106,34 @@ function HomePageContent() {
                <p className="font-bold text-accent-foreground bg-accent inline-block px-2 py-1 rounded">${comic.price.toFixed(2)}</p>
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 mt-auto pt-4">
-              {/* Link to a potential details page */}
                <Link href={`/comics/${comic.id}`} passHref legacyBehavior>
                 <Button variant="secondary" className="w-full sm:w-auto flex-1">Details</Button>
               </Link>
-              <Link href={`/customize?comicId=${comic.id}`} passHref legacyBehavior>
-                 <Button variant="default" className="w-full sm:w-auto flex-1 bg-accent hover:bg-accent/90">Customize</Button>
-              </Link>
-               {/* Add to Cart Button (Functionality to be added) */}
-              {/* <Button
+               {/* Add to Cart Button */}
+               <Button
                 variant="outline"
-                size="icon"
-                onClick={() => {
-                  // TODO: Implement add to cart functionality
-                  toast({ title: `${comic.title} added to cart (simulation)` });
-                }}
+                className="w-full sm:w-auto flex-1"
+                onClick={() => handleAddToCart(comic)}
                 aria-label={`Add ${comic.title} to cart`}
-                className="hidden sm:inline-flex">
-                <ShoppingCart />
-              </Button> */}
+              >
+                 Add to Cart
+               </Button>
             </CardFooter>
           </Card>
         ))}
       </div>
-       <div className="text-center mt-12">
+       <div className="text-center mt-12 space-x-4">
            <Link href="/gallery" passHref legacyBehavior>
                <Button variant="outline" size="lg">View Full Gallery</Button>
+           </Link>
+           <Link href="/customize" passHref legacyBehavior>
+               <Button size="lg" className="bg-accent hover:bg-accent/90">Create Custom Comic</Button>
            </Link>
        </div>
     </div>
   );
 }
 
-
-// Remove the wrapper component
 export default function Home() {
   return <HomePageContent />;
 }

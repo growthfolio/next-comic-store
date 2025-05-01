@@ -1,64 +1,33 @@
 'use client';
 
 import type React from 'react';
-import {useState, useEffect} from 'react';
-import {useRouter} from 'next/navigation';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
-import {Separator} from '@/components/ui/separator';
-import {useToast} from '@/hooks/use-toast';
-import {Loader2, CreditCard} from 'lucide-react';
-// Remove QueryClient imports
-// import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-
-// Mock cart data - replace with actual cart state management later
-interface CartItem {
-  id: string;
-  title: string;
-  price: number;
-  quantity: number;
-  imageUrl?: string; // Optional image for display
-  isCustom?: boolean; // Flag for custom items
-}
-
-const mockCart: CartItem[] = [
-  { id: '1', title: 'The Amazing Spider-Man #300', price: 3.99, quantity: 1, imageUrl: `https://picsum.photos/seed/1/100/150`, isCustom: false },
-  { id: 'custom-1', title: 'Custom Comic (User Upload)', price: 25.00, quantity: 1, isCustom: true },
-  { id: '2', title: 'Batman: The Dark Knight Returns', price: 4.99, quantity: 2, imageUrl: `https://picsum.photos/seed/2/100/150`, isCustom: false },
-];
-
-// Remove QueryClient instantiation
-// const queryClient = new QueryClient();
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image'; // Import next/image
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+import { useCart } from '@/hooks/useCart'; // Import useCart
+import { Loader2, CreditCard, ShoppingBag } from 'lucide-react';
+import Link from 'next/link';
 
 
 function CheckoutPageContent() {
   const router = useRouter();
-  const {toast} = useToast();
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { toast } = useToast();
+  const { cartItems, totalPrice, cartCount, clearCart } = useCart(); // Get cart data from context
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Simulate fetching cart data on mount
-  useEffect(() => {
-    // In a real app, fetch this from context, Zustand, Redux, or localStorage
-    setCartItems(mockCart);
-  }, []);
-
-  const calculateSubtotal = () => {
-    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
-  };
-
+  // Calculate derived values directly from context values
   const calculateTaxes = (subtotal: number) => {
     // Simulate taxes (e.g., 8%)
     return subtotal * 0.08;
   };
 
-  const calculateTotal = (subtotal: number, taxes: number) => {
-    return subtotal + taxes;
-  };
-
-  const subtotal = calculateSubtotal();
+  const subtotal = totalPrice;
   const taxes = calculateTaxes(subtotal);
-  const total = calculateTotal(subtotal, taxes);
+  const total = subtotal + taxes;
 
   const handleSimulatePayment = async () => {
     setIsProcessing(true);
@@ -71,10 +40,8 @@ function CheckoutPageContent() {
       description: 'Your order has been placed.',
     });
     setIsProcessing(false);
-    // Clear cart (simulation)
-    setCartItems([]);
-    // Redirect to order confirmation page
-    router.push('/order-confirmation'); // Example redirect
+    clearCart(); // Clear the cart using context function
+    router.push('/order-confirmation'); // Redirect to order confirmation page
   };
 
   return (
@@ -87,24 +54,44 @@ function CheckoutPageContent() {
         <CardContent className="space-y-6">
           <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
           {cartItems.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">Your cart is empty.</p>
+             <div className="text-center py-12 text-muted-foreground">
+              <ShoppingBag className="mx-auto h-12 w-12 mb-4" />
+              <p className="text-lg">Your cart is empty.</p>
+              <Link href="/gallery" passHref legacyBehavior>
+                <Button variant="link" className="mt-2">Start Shopping</Button>
+              </Link>
+            </div>
           ) : (
             <div className="space-y-4">
               {cartItems.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-4 last:border-b-0">
-                   {/* Optional Image */}
-                   {item.imageUrl && !item.isCustom && (
-                     <img src={item.imageUrl} alt={item.title} className="w-16 h-24 object-cover rounded" data-ai-hint="comic book small"/>
-                   )}
-                   {item.isCustom && (
-                     <div className="w-16 h-24 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs text-center">Custom Item</div>
-                   )}
+                   {/* Image */}
+                   <div className="relative w-16 h-24 flex-shrink-0">
+                      {item.imageUrl ? (
+                           <Image
+                               src={item.imageUrl}
+                               alt={item.title}
+                               fill
+                               style={{objectFit: 'cover'}}
+                               className="rounded"
+                               data-ai-hint="comic book small checkout"
+                               sizes="64px"
+                           />
+                      ) : (
+                           <div className="w-full h-full bg-muted rounded flex items-center justify-center text-muted-foreground text-xs text-center p-1">
+                               {item.isCustom ? 'Custom' : 'No Img'}
+                           </div>
+                      )}
+                    </div>
 
-                  <div className="flex-grow">
-                    <p className="font-medium">{item.title}</p>
+                  <div className="flex-grow min-w-0">
+                    <p className="font-medium truncate">{item.title}</p>
+                     {item.isCustom && item.notes && (
+                         <p className="text-xs text-muted-foreground mt-1 line-clamp-1">Notes: {item.notes}</p>
+                     )}
                     <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
                   </div>
-                  <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-semibold flex-shrink-0">${(item.price * item.quantity).toFixed(2)}</p>
                 </div>
               ))}
             </div>
@@ -115,7 +102,7 @@ function CheckoutPageContent() {
               <Separator className="my-6" />
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <p className="text-muted-foreground">Subtotal</p>
+                  <p className="text-muted-foreground">Subtotal ({cartCount} items)</p>
                   <p>${subtotal.toFixed(2)}</p>
                 </div>
                 <div className="flex justify-between">
@@ -146,7 +133,7 @@ function CheckoutPageContent() {
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Simulate Payment
+                  Simulate Payment (${total.toFixed(2)})
                 </>
               )}
             </Button>
@@ -157,8 +144,6 @@ function CheckoutPageContent() {
   );
 }
 
-
-// Remove the wrapper component
 export default function CheckoutPage() {
     return <CheckoutPageContent />;
 }
