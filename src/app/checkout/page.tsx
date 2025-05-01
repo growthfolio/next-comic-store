@@ -57,8 +57,8 @@ function CheckoutPageContent() {
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
 
     try {
-        // Add order to mock order history
-        await addOrder(user.email, cartItems, total); // Use user email as ID for mock
+        // Add order to mock order history, passing user name
+        await addOrder(user.email, user.name, cartItems, total); // Use user email as ID and pass name
 
         // Simulate success
         toast({
@@ -123,7 +123,7 @@ function CheckoutPageContent() {
                 <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-4 last:border-b-0">
                    {/* Image */}
                    <div className="relative w-16 h-24 flex-shrink-0">
-                      {item.imageUrl ? (
+                      {item.imageUrl && !item.isCustom ? ( // Check if custom item to decide placeholder text
                            <Image
                                src={item.imageUrl}
                                alt={item.title}

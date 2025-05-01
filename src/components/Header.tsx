@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Home, Image as ImageIcon, ShoppingCart, User, LogIn, LogOut, Package } from 'lucide-react'; // Added Package icon
+import { BookOpen, Home, Image as ImageIcon, ShoppingCart, User, LogIn, LogOut, Package, ShieldCheck } from 'lucide-react'; // Added ShieldCheck icon
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import {
@@ -68,6 +68,18 @@ export function Header() {
                 My Orders
               </Link>
             )}
+            {/* Admin Panel Link - Show only if logged in and admin */}
+           {user && user.isAdmin && (
+              <Link
+                href="/admin/orders"
+                className={cn(
+                  'transition-colors hover:text-primary flex items-center gap-1',
+                  pathname.startsWith('/admin') ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                 <ShieldCheck className="h-4 w-4" /> Admin
+              </Link>
+            )}
         </nav>
         <div className="flex items-center gap-2 md:gap-4 ml-auto"> {/* Added ml-auto */}
           {/* Cart Icon */}
@@ -102,7 +114,7 @@ export function Header() {
                    <DropdownMenuContent className="w-56" align="end" forceMount>
                      <DropdownMenuLabel className="font-normal">
                        <div className="flex flex-col space-y-1">
-                         <p className="text-sm font-medium leading-none">{user.name}</p>
+                         <p className="text-sm font-medium leading-none">{user.isAdmin ? `Admin: ${user.name}` : user.name}</p>
                          <p className="text-xs leading-none text-muted-foreground">
                            {user.email}
                          </p>
@@ -115,6 +127,15 @@ export function Header() {
                             <span>My Orders</span>
                          </Link>
                       </DropdownMenuItem>
+                      {/* Admin Panel Link in Dropdown */}
+                      {user.isAdmin && (
+                          <DropdownMenuItem asChild>
+                             <Link href="/admin/orders" className="cursor-pointer">
+                                <ShieldCheck className="mr-2 h-4 w-4" />
+                                <span>Admin Panel</span>
+                             </Link>
+                          </DropdownMenuItem>
+                      )}
                        {/* Add more profile/settings links here if needed */}
                      <DropdownMenuSeparator />
                      <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">

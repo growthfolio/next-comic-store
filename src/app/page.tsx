@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 import { useCart } from '@/hooks/useCart'; // Import useCart
+import { ShieldCheck } from 'lucide-react'; // Import icon for admin
 
 function HomePageContent() {
   const { toast } = useToast();
@@ -77,8 +78,11 @@ function HomePageContent() {
     <div className="container mx-auto px-4 py-8">
       {/* Welcome Message */}
       {user && (
-          <div className="mb-8 p-4 bg-accent/10 border border-accent rounded-lg text-center">
-            <p className="text-lg font-medium text-accent-foreground">Welcome back, {user.name}!</p>
+          <div className="mb-8 p-4 bg-accent/10 border border-accent rounded-lg text-center flex items-center justify-center gap-2">
+             {user.isAdmin && <ShieldCheck className="h-5 w-5 text-primary" />}
+            <p className="text-lg font-medium text-accent-foreground">
+                {user.isAdmin ? `Welcome back, Admin ${user.name}!` : `Welcome back, ${user.name}!`}
+            </p>
           </div>
       )}
 

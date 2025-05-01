@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 interface User {
   name: string;
   email: string;
+  isAdmin?: boolean; // Add isAdmin flag
 }
 
 interface AuthContextType {
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_TOKEN_KEY = 'comicHubAuthToken';
 const USER_INFO_KEY = 'comicHubUserInfo';
+const ADMIN_EMAIL = 'admin@comichub.com'; // Define an admin email for mocking
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -60,7 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(authToken);
 
       // Mock user info based on email (in real app, get from API)
-      const userInfo = { name: credentials.email.split('@')[0] || 'User', email: credentials.email };
+      const isAdmin = credentials.email.toLowerCase() === ADMIN_EMAIL;
+      const userInfo: User = {
+          name: credentials.email.split('@')[0] || 'User',
+          email: credentials.email,
+          isAdmin: isAdmin
+      };
       setUser(userInfo);
 
       localStorage.setItem(AUTH_TOKEN_KEY, authToken);
@@ -75,10 +82,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (info: RegisterInfo) => {
     try {
         setIsLoading(true);
+         // Prevent registering the admin email
+        if (info.email.toLowerCase() === ADMIN_EMAIL) {
+            throw new Error(`Cannot register with the admin email address.`);
+        }
         const { token: authToken } = await apiRegister(info); // Get token from mock service
         setToken(authToken);
 
-        const userInfo = { name: info.name, email: info.email };
+        const userInfo: User = { name: info.name, email: info.email, isAdmin: false }; // New users are not admins
         setUser(userInfo);
 
         localStorage.setItem(AUTH_TOKEN_KEY, authToken);
