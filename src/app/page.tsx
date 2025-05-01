@@ -9,29 +9,30 @@ import { getComics, type Comic } from '@/services/comic-service';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
-import { useCart } from '@/hooks/useCart'; // Import useCart
-import { ShieldCheck } from 'lucide-react'; // Import icon for admin
+import { useAuth } from '@/hooks/useAuth';
+import { useCart } from '@/hooks/useCart';
+import { ShieldCheck } from 'lucide-react';
+import { cn } from '@/lib/utils'; // Import cn
 
 function HomePageContent() {
   const { toast } = useToast();
-  const { user, isLoading: isAuthLoading } = useAuth(); // Get user state
-  const { addItem } = useCart(); // Get addItem function
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const { addItem } = useCart();
 
-  // Fetch comics from the API using useQuery
+  // Fetch comics from the API (using Prisma backend)
   const { data: comics, isLoading: isComicsLoading, error } = useQuery<Comic[], Error>({
-    queryKey: ['comics'], // react-query key
-    queryFn: getComics, // The function to fetch data
-    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
+    queryKey: ['comics'],
+    queryFn: getComics,
+    staleTime: 1000 * 60 * 5,
   });
 
   const handleAddToCart = (comic: Comic) => {
      addItem({
-        id: comic.id,
+        id: comic.id, // Use numeric ID from Prisma
         title: comic.title,
         price: comic.price,
-        quantity: 1, // Add one item at a time from here
-        imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`, // Use placeholder if no image
+        quantity: 1,
+        imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`,
         isCustom: false,
      });
   };
@@ -40,7 +41,6 @@ function HomePageContent() {
   if (isComicsLoading || isAuthLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        {/* Optional: Auth loading indicator */}
          {isAuthLoading && <Skeleton className="h-8 w-48 mb-4 mx-auto" />}
         <h1 className="text-3xl font-bold mb-8 text-center">Featured Comics</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -65,8 +65,6 @@ function HomePageContent() {
   }
 
   if (error) {
-    // Toast is handled by the onError callback in useQuery by default, but we can add specific handling here if needed.
-    // We'll display a message on the page as well.
     console.error("Error fetching comics:", error);
     return (
       <div className="container mx-auto px-4 py-8 text-center text-destructive">
@@ -77,7 +75,6 @@ function HomePageContent() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Welcome Message */}
       {user && (
           <div className="mb-8 p-4 bg-accent/10 border border-accent rounded-lg text-center flex items-center justify-center gap-2">
              {user.isAdmin && <ShieldCheck className="h-5 w-5 text-primary" />}
@@ -89,9 +86,8 @@ function HomePageContent() {
 
       <h1 className="text-3xl font-bold mb-8 text-center">Featured Comics</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {/* Displaying only first 4 as samples - Ensure comics is not undefined */}
         {comics && comics.length > 0 ? (
-            comics.slice(0, 4).map((comic, index) => ( // Added index for priority
+            comics.slice(0, 4).map((comic, index) => (
               <Card key={comic.id} className="overflow-hidden shadow-lg rounded-lg flex flex-col">
                 <div className="relative w-full h-60">
                   <Image
@@ -102,21 +98,20 @@ function HomePageContent() {
                     className="rounded-t-lg"
                     data-ai-hint="comic book cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                    priority={index < 2} // Prioritize loading first few images
+                    priority={index < 2}
                   />
                 </div>
                 <CardHeader className="flex-grow">
                   <CardTitle className="text-lg font-semibold">{comic.title}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                   <p className="text-muted-foreground text-sm mb-2">Category: {comic.category}</p>
+                   <p className="text-muted-foreground text-sm mb-2">Type: {comic.type}</p>
                    <p className="font-bold text-accent-foreground bg-accent inline-block px-2 py-1 rounded">${comic.price.toFixed(2)}</p>
                 </CardContent>
                 <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 mt-auto pt-4">
                    <Link href={`/comics/${comic.id}`} passHref legacyBehavior>
                     <Button variant="secondary" className="w-full sm:w-auto flex-1">Details</Button>
                   </Link>
-                   {/* Add to Cart Button */}
                    <Button
                     variant="outline"
                     className="w-full sm:w-auto flex-1"

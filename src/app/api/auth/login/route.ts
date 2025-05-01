@@ -1,7 +1,8 @@
 // src/app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
-import { authStore, type ApiUser } from '../user'; // Import shared store and type
+import prisma from '@/lib/prisma'; // Import the Prisma client instance
 import type { LoginCredentials } from '@/services/auth-service'; // Reuse type
+import type { User as ApiUser } from '@/services/auth-service'; // Use the frontend User type definition
 
 export async function POST(request: Request) {
   try {
@@ -11,38 +12,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
     }
 
-    // Simulate database lookup delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const user = authStore.findUserByEmail(email);
+    // Find user in the database
+    const user = await prisma.user.findUnique({
+      where: { email: email },
+    });
 
     if (!user) {
-      console.log(`API Login Failed: User ${email} not found`);
+      console.log(`API Login Failed: User ${email} not found in DB`);
       return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 }); // Unauthorized
     }
 
-    // Simulate password check delay
-    const isPasswordValid = await authStore.verifyPassword(password, user.passwordHash);
+    // Compare plaintext password (INSECURE - for dev only!)
+    // In a real app, use bcrypt.compare() here
+    const isPasswordValid = (password === user.password);
 
     if (!isPasswordValid) {
       console.log(`API Login Failed: Invalid password for ${email}`);
       return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 }); // Unauthorized
     }
 
-    // Generate a mock token (in real app, use JWT library like 'jsonwebtoken' or 'jose')
-    const mockToken = `mock-jwt-token-for-${user.id}-${Date.now()}`;
+    // Generate a mock token
+    const mockToken = `mock-prisma-jwt-token-for-${user.id}-${Date.now()}`;
 
-    console.log(`API Login Success: User ${email} logged in`);
+    console.log(`API Login Success: User ${email} logged in (from DB)`);
 
-    // Return token and user info (excluding password hash)
-    const { passwordHash, ...userResponse } = user;
+    // Prepare user response object matching the frontend User type
+    const userResponse: ApiUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      isAdmin: user.isAdmin,
+    };
+
+    // Return token and user info
     return NextResponse.json({
         token: mockToken,
-        user: userResponse // Send user details back too
+        user: userResponse // Send filtered user details back
     });
 
   } catch (error) {
     console.error('API Login Error:', error);
-    return NextResponse.json({ message: 'Internal server error during login' }, { status: 500 });
+    // Avoid leaking detailed error messages in production
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error during login';
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
+  } finally {
+     // Ensure Prisma client is disconnected after the request in serverless environments
+     // await prisma.$disconnect(); // Consider if needed based on deployment strategy
   }
 }

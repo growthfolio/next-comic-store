@@ -1,4 +1,3 @@
-
 'use client';
 
 import type React from 'react';
@@ -14,16 +13,16 @@ import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 import { addOrder } from '@/services/order-service'; // Import addOrder service
 import { Loader2, CreditCard, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils'; // Import cn if not already
 
 
 function CheckoutPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  const { cartItems, totalPrice, cartCount, clearCart } = useCart(); // Get cart data from context
-  const { user, isLoading: isAuthLoading } = useAuth(); // Get user info
+  const { cartItems, totalPrice, cartCount, clearCart } = useCart();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Redirect to login if user is not authenticated and auth check is complete
   useEffect(() => {
       if (!isAuthLoading && !user) {
           toast({
@@ -31,14 +30,12 @@ function CheckoutPageContent() {
               description: "Please log in to proceed to checkout.",
               variant: "destructive",
           });
-          router.push('/login?redirect=/checkout'); // Redirect to login, store intended destination
+          router.push('/login?redirect=/checkout');
       }
   }, [user, isAuthLoading, router, toast]);
 
 
-  // Calculate derived values directly from context values
   const calculateTaxes = (subtotal: number) => {
-    // Simulate taxes (e.g., 8%)
     return subtotal * 0.08;
   };
 
@@ -47,8 +44,9 @@ function CheckoutPageContent() {
   const total = subtotal + taxes;
 
   const handleSimulatePayment = async () => {
-    if (!user) {
-        toast({ title: "Error", description: "User not found. Cannot place order.", variant: "destructive" });
+    // Ensure user object and user.id exist and are numbers
+    if (!user || typeof user.id !== 'number') {
+        toast({ title: "Error", description: "User information is missing or invalid. Cannot place order.", variant: "destructive" });
         return;
     }
      if (cartItems.length === 0) {
@@ -57,19 +55,17 @@ function CheckoutPageContent() {
      }
 
     setIsProcessing(true);
-    // No separate payment simulation needed, addOrder includes API call delay
 
     try {
-        // Call the addOrder service function which interacts with the API
-        await addOrder(user.email, user.name, cartItems, total); // Use user email as ID and pass name
+        // Call addOrder with numeric userId
+        await addOrder(user.id, user.name, cartItems, total);
 
-        // If addOrder succeeds:
         toast({
           title: 'Payment Successful!',
           description: 'Your order has been placed.',
         });
-        clearCart(); // Clear the cart using context function
-        router.push('/order-confirmation'); // Redirect to order confirmation page
+        clearCart();
+        router.push('/order-confirmation');
 
     } catch (error) {
         console.error("Failed to add order:", error);
@@ -84,7 +80,6 @@ function CheckoutPageContent() {
 
   };
 
-  // Show loading spinner if auth is loading or processing payment
   if (isAuthLoading || isProcessing) {
       return (
           <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
@@ -94,7 +89,6 @@ function CheckoutPageContent() {
       );
   }
 
-  // If user check completed and still no user (should have been redirected, but as fallback)
   if (!user) {
        return (
            <div className="container mx-auto px-4 py-8 text-center">
@@ -124,10 +118,10 @@ function CheckoutPageContent() {
           ) : (
             <div className="space-y-4">
               {cartItems.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-4 last:border-b-0">
+                <div key={`${item.id}-${item.title}`} className="flex items-center justify-between gap-4 border-b pb-4 last:border-b-0">
                    {/* Image */}
                    <div className="relative w-16 h-24 flex-shrink-0">
-                      {item.imageUrl ? ( // Always show image if available
+                      {item.imageUrl ? (
                            <Image
                                src={item.imageUrl}
                                alt={item.title}
@@ -183,7 +177,7 @@ function CheckoutPageContent() {
             <Button
               onClick={handleSimulatePayment}
               className="w-full bg-accent hover:bg-accent/90"
-              disabled={isProcessing || !user || cartItems.length === 0} // Disable if processing, no user, or empty cart
+              disabled={isProcessing || !user || cartItems.length === 0}
             >
               {isProcessing ? (
                 <>
@@ -205,6 +199,5 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
-    // Providers wrapper already handles context
     return <CheckoutPageContent />;
 }

@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String // Storing plaintext passwords for now (NOT FOR PRODUCTION)
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  price       Float
+  imageUrl    String
+  type        String // "sample" or "custom" (though custom might not be a Product)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Order {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade) // Cascade delete orders if user is deleted
+  // Store items as JSON or create a separate OrderItem model if more structure is needed
+  // For simplicity, storing order details directly here
+  itemsJson      String // JSON string representation of order items
+  totalPrice     Float
+  status         String    @default("Pending") // e.g., "Pending", "In Production", "Completed", "Cancelled"
+  customerName   String? // Store customer name at the time of order
+  // Fields specific to *custom* orders might live here or in OrderItem
+  customImageUrl String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // If linking directly to a single product (e.g., for sample orders)
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull) // Set product to null if product deleted
+}

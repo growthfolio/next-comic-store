@@ -1,90 +1,96 @@
 // src/app/api/orders/route.ts
 import { NextResponse } from 'next/server';
-import type { UserOrder, OrderStatus, OrderItem } from '@/services/order-service'; // Reuse types
-import type { CartItem } from '@/hooks/useCart';
+import prisma from '@/lib/prisma';
+import type { OrderStatus } from '@/services/order-service'; // Reuse status type
+import type { CartItem } from '@/hooks/useCart'; // For POST request body type
+import { Prisma } from '@prisma/client';
 
-// In-memory store for orders
-let ordersStore: UserOrder[] = [];
+// GET /api/orders - Returns all orders from the database
+export async function GET(request: Request) {
+  // Optional: Add query param handling for filtering later (e.g., by userId or status)
+  // const { searchParams } = new URL(request.url);
+  // const userId = searchParams.get('userId');
 
-// Helper to get orders (simulates DB read)
-const getOrders = () => ordersStore;
-
-// Helper to add an order (simulates DB write)
-const addOrderToStore = (order: UserOrder) => {
-  ordersStore.push(order);
-};
-
-// Helper to update order status (simulates DB update)
-const updateOrderStatusInStore = (orderId: string, status: OrderStatus): UserOrder | null => {
-    const orderIndex = ordersStore.findIndex(o => o.id === orderId);
-    if (orderIndex !== -1) {
-        ordersStore[orderIndex].status = status;
-        return ordersStore[orderIndex];
-    }
-    return null;
+  try {
+    const orders = await prisma.order.findMany({
+      orderBy: {
+        createdAt: 'desc', // Show newest orders first
+      },
+      // include: { user: { select: { name: true, email: true } } } // Optionally include related user data
+    });
+    return NextResponse.json(orders);
+  } catch (error) {
+    console.error('API Error fetching orders:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch orders';
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
+  } finally {
+    // await prisma.$disconnect(); // Consider based on deployment
+  }
 }
 
-// GET /api/orders - Returns all orders
-export async function GET() {
-  // Simulate delay
-  await new Promise(resolve => setTimeout(resolve, 150));
-  const orders = getOrders();
-  return NextResponse.json(orders);
-}
-
-// POST /api/orders - Creates a new order
+// POST /api/orders - Creates a new order in the database
 interface PostOrderRequestBody {
-    userId: string;
+    userId: number; // Expect numeric ID from frontend
     customerName: string;
-    cartItems: CartItem[];
-    orderTotalPrice: number;
+    itemsJson: string; // Expect items as a JSON string
+    totalPrice: number;
+    // Optional fields for custom orders, might be redundant if in itemsJson
+    customImageUrl?: string;
+    notes?: string;
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as PostOrderRequestBody;
-    const { userId, customerName, cartItems, orderTotalPrice } = body;
+    const { userId, customerName, itemsJson, totalPrice, customImageUrl, notes } = body;
 
-    if (!userId || !cartItems || cartItems.length === 0 || orderTotalPrice === undefined) {
-        return NextResponse.json({ message: 'Missing required order data' }, { status: 400 });
+    // Basic validation
+    if (!userId || !itemsJson || totalPrice === undefined) {
+        return NextResponse.json({ message: 'Missing required order data (userId, itemsJson, totalPrice)' }, { status: 400 });
     }
 
-    // Simulate delay
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Validate if itemsJson is valid JSON
+    let parsedItems;
+    try {
+        parsedItems = JSON.parse(itemsJson);
+        if (!Array.isArray(parsedItems) || parsedItems.length === 0) {
+             return NextResponse.json({ message: 'itemsJson must be a non-empty array' }, { status: 400 });
+        }
+    } catch (e) {
+        return NextResponse.json({ message: 'Invalid itemsJson format' }, { status: 400 });
+    }
 
-    const newOrder: UserOrder = {
-      id: `order-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      userId: userId,
-      customerName: customerName,
-      date: new Date().toISOString(),
-      items: cartItems.map((item): OrderItem => ({ // Explicitly type the mapped item
-        productId: item.id,
-        title: item.title,
-        price: item.price,
-        quantity: item.quantity,
-        imageUrl: item.imageUrl,
-        isCustom: item.isCustom,
-        notes: item.notes,
-      })),
-      totalPrice: orderTotalPrice,
-      status: 'Pending', // Default status
-    };
+    // Create the order in the database
+    const newOrder = await prisma.order.create({
+      data: {
+        userId: userId,
+        customerName: customerName,
+        itemsJson: itemsJson, // Store the JSON string
+        totalPrice: totalPrice,
+        customImageUrl: customImageUrl, // Store if provided
+        notes: notes, // Store if provided
+        status: 'Pending', // Default status from schema
+        // createdAt and updatedAt are handled by Prisma
+      },
+    });
 
-    addOrderToStore(newOrder);
-    console.log('API: Order added:', newOrder);
-
-    return NextResponse.json(newOrder, { status: 201 });
+    console.log('API: Order added to DB:', newOrder);
+    return NextResponse.json(newOrder, { status: 201 }); // Return the created order
 
   } catch (error) {
     console.error('API Error creating order:', error);
-    return NextResponse.json({ message: 'Failed to create order' }, { status: 500 });
+     // Handle potential foreign key constraint errors (e.g., user doesn't exist)
+     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003') { // Foreign key constraint failed
+             return NextResponse.json({ message: `Invalid userId: ${ (error.meta?.field_name as string | undefined)?.includes('userId') ? (await request.clone().json()).userId : 'unknown'} does not exist.` }, { status: 400 });
+        }
+     }
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create order';
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
+  } finally {
+    // await prisma.$disconnect(); // Consider based on deployment
   }
 }
 
-// We might need a PATCH or PUT later for status updates, handled here for simplicity for now
-// Example: Expose update function for potential future PATCH route
-export const ordersApiHelpers = {
-    updateStatus: updateOrderStatusInStore,
-    getOrders,
-    // Note: Direct manipulation of 'ordersStore' is discouraged outside this module.
-};
+// Remove the in-memory store and helper functions
+// export const ordersApiHelpers = { ... }; // No longer needed

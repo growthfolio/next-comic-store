@@ -1,4 +1,3 @@
-
 'use client';
 
 import type React from 'react';
@@ -13,16 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-// Import API service functions
+// Import API service functions and types (now aligned with Prisma)
 import { getAllCustomOrders, updateOrderStatus, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
 import { Loader2, Package, Image as ImageIcon, Info, AlertTriangle, CheckCircle, RefreshCcw } from 'lucide-react';
+import { cn } from '@/lib/utils'; // Import cn
 
-// Helper to get the first custom item's details for display
+// Helper to get the first custom item's details from the parsed items array
 const getFirstCustomItem = (items: OrderItem[]): OrderItem | undefined => {
   return items.find(item => item.isCustom);
 };
 
-// Status Badge Component
+// Status Badge Component (Reused)
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
     let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
     let icon = <Info className="h-3 w-3 mr-1" />;
@@ -33,12 +33,12 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
             icon = <RefreshCcw className="h-3 w-3 mr-1 animate-spin animation-duration-2000" />;
             break;
         case 'In Production':
-            variant = "default"; // Using primary color
+            variant = "default";
              icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
             break;
         case 'Completed':
-            variant = "secondary"; // Using accent color via theme
-             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />; // Specific color for check
+             variant = "secondary"; // Using theme accent color (teal)
+             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />;
             break;
          case 'Cancelled':
             variant = "destructive";
@@ -47,7 +47,7 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
     }
 
     return (
-        <Badge variant={variant} className="flex items-center text-xs whitespace-nowrap capitalize">
+        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize")}>
             {icon}
             {status}
         </Badge>
@@ -59,53 +59,40 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
 function AdminOrdersPageContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [updatingStatusMap, setUpdatingStatusMap] = useState<Record<string, boolean>>({}); // Track loading state per order
+  const [updatingStatusMap, setUpdatingStatusMap] = useState<Record<number, boolean>>({}); // Track loading state per order using numeric ID
 
-  // Fetch all custom orders using useQuery and the API service
+  // Fetch all custom orders using useQuery and the API service (which now uses Prisma)
   const { data: orders, isLoading, error, isError } = useQuery<UserOrder[], Error>({
     queryKey: ['allCustomOrders'],
-    queryFn: getAllCustomOrders, // Use the API service function
+    queryFn: getAllCustomOrders, // API service function fetches from Prisma via API
     staleTime: 1000 * 60, // Cache for 1 minute
   });
 
-  // Mutation for updating order status using the API service
+  // Mutation for updating order status using the API service (which now uses Prisma)
   const mutation = useMutation({
-     mutationFn: ({ orderId, newStatus }: { orderId: string, newStatus: OrderStatus }) =>
-        updateOrderStatus(orderId, newStatus), // Use the API service function
+     mutationFn: ({ orderId, newStatus }: { orderId: number, newStatus: OrderStatus }) =>
+        updateOrderStatus(orderId, newStatus), // Use the API service function with numeric ID
      onMutate: async ({ orderId }) => {
-       setUpdatingStatusMap(prev => ({ ...prev, [orderId]: true })); // Set loading state for this order
-       // Optional: Optimistic update logic could go here
-       // await queryClient.cancelQueries({ queryKey: ['allCustomOrders'] })
-       // const previousOrders = queryClient.getQueryData<UserOrder[]>(['allCustomOrders'])
-       // queryClient.setQueryData<UserOrder[]>(['allCustomOrders'], old => ...update status locally...)
-       // return { previousOrders }
+       setUpdatingStatusMap(prev => ({ ...prev, [orderId]: true }));
      },
      onSuccess: (updatedOrder, { orderId, newStatus }) => {
-       toast({ title: 'Status Updated', description: `Order ${orderId.substring(0, 8)}... status changed to ${newStatus}.` });
-       // Invalidate the query to refetch fresh data after successful update
-       // This replaces the optimistic update or updates on top of it
+       toast({ title: 'Status Updated', description: `Order ${orderId} status changed to ${newStatus}.` });
        queryClient.invalidateQueries({ queryKey: ['allCustomOrders'] });
      },
      onError: (err, { orderId }, context: any) => {
        toast({ title: 'Update Failed', description: (err as Error).message || 'Could not update order status.', variant: 'destructive' });
-       // Optional: Rollback optimistic update if implemented
-       // if (context?.previousOrders) {
-       //   queryClient.setQueryData(['allCustomOrders'], context.previousOrders)
-       // }
      },
      onSettled: (_, __, { orderId }) => {
-         setUpdatingStatusMap(prev => ({ ...prev, [orderId]: false })); // Clear loading state for this order regardless of outcome
+         setUpdatingStatusMap(prev => ({ ...prev, [orderId]: false }));
      },
   });
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    // Prevent updating if already updating
+  const handleStatusChange = (orderId: number, newStatus: OrderStatus) => {
     if (updatingStatusMap[orderId]) return;
     mutation.mutate({ orderId, newStatus });
   };
 
 
-  // Loading State
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -114,12 +101,10 @@ function AdminOrdersPageContent() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <span className="ml-3 text-muted-foreground">Loading custom orders...</span>
          </div>
-        {/* Optional: Skeleton can be added back here */}
       </div>
     );
   }
 
-  // Error State
   if (isError) {
      console.error("Error fetching custom orders:", error);
     return (
@@ -134,17 +119,17 @@ function AdminOrdersPageContent() {
      );
   }
 
-  // Main Content
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8 text-center">Admin Panel - Custom Orders</h1>
 
       {orders && orders.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {orders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
-                 .map((order) => {
-                   const customItem = getFirstCustomItem(order.items); // Get details of the first custom item
-                   const isUpdating = updatingStatusMap[order.id]; // Check if this specific order is being updated
+          {/* Orders are already sorted by API/service */}
+          {orders.map((order) => {
+                   // Get details of the first custom item from the parsed items array
+                   const customItem = getFirstCustomItem(order.items);
+                   const isUpdating = updatingStatusMap[order.id];
 
                    return (
                       <Card key={order.id} className="shadow-md overflow-hidden flex flex-col bg-card">
@@ -152,49 +137,66 @@ function AdminOrdersPageContent() {
                               <div className="flex justify-between items-start gap-2">
                                 <div className="flex-grow">
                                     <CardTitle className="text-lg truncate" title={`Order ID: ${order.id}`}>
-                                        Order: {order.id.substring(0, 15)}...
+                                        Order ID: {order.id}
                                     </CardTitle>
                                     <CardDescription className="text-xs mt-1">
-                                        By: {order.customerName || order.userId} <br />
+                                        {/* Display user ID or name */}
+                                        By: {order.customerName || `User ID: ${order.userId}`} <br />
                                         On: {format(new Date(order.date), 'PPP p')}
                                     </CardDescription>
                                 </div>
                                 <StatusBadge status={order.status} />
                               </div>
-
                           </CardHeader>
                           <CardContent className="flex-grow space-y-3 pt-4">
                               {customItem ? (
                                   <>
+                                      {/* Display custom item image */}
                                       <div className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden border">
                                           {customItem.imageUrl ? (
                                               <Image
                                                   src={customItem.imageUrl}
                                                   alt={`Custom image for order ${order.id}`}
                                                   fill
-                                                  style={{ objectFit: 'contain' }} // Use contain to show the whole image
+                                                  style={{ objectFit: 'contain' }}
                                                   data-ai-hint="user uploaded custom comic image admin view"
                                                    sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                                                   // Add placeholder?
                                               />
                                           ) : (
                                               <div className="flex items-center justify-center h-full text-muted-foreground">
                                                   <ImageIcon className="h-8 w-8" />
-                                                  <span className="ml-2 text-sm">No Image Uploaded</span>
+                                                  <span className="ml-2 text-sm">No Image Provided</span>
                                               </div>
                                           )}
                                       </div>
+                                      {/* Display custom item notes */}
                                        <div>
                                           <p className="text-sm font-medium">Notes:</p>
                                           <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded border max-h-24 overflow-y-auto">
                                               {customItem.notes || <em>No notes provided.</em>}
                                           </p>
                                        </div>
+                                       {/* Optionally display other items in the order */}
+                                       {order.items.length > 1 && (
+                                           <div className="mt-3 pt-3 border-t">
+                                               <p className="text-xs font-medium text-muted-foreground mb-1">Other Items:</p>
+                                               <ul className="text-xs list-disc list-inside text-muted-foreground space-y-1">
+                                                   {order.items
+                                                       .filter(item => !item.isCustom)
+                                                       .map((item, idx) => (
+                                                           <li key={idx} className="truncate">
+                                                               {item.quantity}x {item.title} (${item.price.toFixed(2)} each)
+                                                           </li>
+                                                       ))}
+                                               </ul>
+                                           </div>
+                                       )}
                                   </>
                               ) : (
+                                  // Fallback if somehow no custom item is found in a custom order
                                   <div className="flex items-center justify-center h-full text-destructive-foreground bg-destructive/10 p-4 rounded-md">
                                       <AlertTriangle className="h-5 w-5 mr-2" />
-                                      <p className="text-sm font-medium">Error: Custom item details not found.</p>
+                                      <p className="text-sm font-medium">Error: Custom item details not parsed correctly.</p>
                                   </div>
                               )}
                           </CardContent>
@@ -202,7 +204,7 @@ function AdminOrdersPageContent() {
                               <Select
                                   value={order.status}
                                   onValueChange={(newStatus: OrderStatus) => handleStatusChange(order.id, newStatus)}
-                                  disabled={isUpdating} // Disable while updating
+                                  disabled={isUpdating}
                               >
                                   <SelectTrigger className="w-full" aria-label={`Current status ${order.status}. Change status:`}>
                                       <SelectValue placeholder="Change Status" />

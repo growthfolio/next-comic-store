@@ -12,72 +12,67 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { uploadImage } from '@/services/comic-service'; // Use the updated service
+import { uploadImage } from '@/services/comic-service';
 import { useToast } from '@/hooks/use-toast';
-import { useCart } from '@/hooks/useCart'; // Import useCart
+import { useCart } from '@/hooks/useCart';
 import { Loader2, Upload, ShoppingCart } from 'lucide-react';
+import { cn } from '@/lib/utils'; // Import cn
+
 
 const formSchema = z.object({
-  // Image file is required
   imageFile: z.instanceof(File).refine(file => file !== undefined && file.size > 0, "An image file is required."),
   notes: z.string().optional(),
 });
 
 type CustomizationFormData = z.infer<typeof formSchema>;
 
-// Define a price for custom comics (adjust as needed)
 const CUSTOM_COMIC_PRICE = 25.00;
 
 function CustomizePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const comicId = searchParams.get('comicId'); // Optional base comic ID
+  const comicIdParam = searchParams.get('comicId'); // Optional base comic ID (string)
   const { toast } = useToast();
-  const { addItem } = useCart(); // Get addItem function
+  const { addItem } = useCart();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false); // General submitting state
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CustomizationFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       notes: '',
-      imageFile: undefined, // Explicitly default to undefined
+      imageFile: undefined,
     },
-     mode: "onChange", // Validate on change for better UX
+     mode: "onChange",
   });
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      form.setValue('imageFile', file, { shouldValidate: true }); // Validate after setting value
+      form.setValue('imageFile', file, { shouldValidate: true });
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
     } else {
-      form.setValue('imageFile', undefined, { shouldValidate: true }); // Validate after clearing
+      form.setValue('imageFile', undefined, { shouldValidate: true });
       setPreviewUrl(null);
     }
-     // No need to manually trigger, setValue with shouldValidate handles it if mode is onChange/onBlur
   };
 
-  // Renamed function for clarity
   const onSubmitCustomization: SubmitHandler<CustomizationFormData> = async (data) => {
-    // Schema validation already ensures imageFile exists here
     if (!data.imageFile) {
-      // This case should ideally not be hit due to zod refinement, but as a safeguard:
       toast({ title: 'Error', description: 'Image file is missing.', variant: 'destructive'});
       return;
     }
 
     setIsUploading(true);
-    setIsSubmitting(true); // Start general loading state
+    setIsSubmitting(true);
     let uploadedImageUrl = '';
 
     try {
-      // Upload the image using the API service
       uploadedImageUrl = await uploadImage(data.imageFile);
       toast({ title: 'Image Uploaded Successfully', description: 'Preparing custom comic...' });
     } catch (error) {
@@ -88,30 +83,29 @@ function CustomizePageContent() {
         variant: 'destructive',
       });
       setIsUploading(false);
-      setIsSubmitting(false); // Stop loading state
+      setIsSubmitting(false);
       return;
     } finally {
-      setIsUploading(false); // Stop upload-specific loading indicator
+      setIsUploading(false);
     }
 
-    // Create a unique ID for the custom cart item
+    // Create a unique ID for the custom cart item (use string format)
     const customItemId = `custom-${Date.now()}`;
+    // Try parsing the base comic ID
+    const baseComicId = comicIdParam ? parseInt(comicIdParam, 10) : undefined;
 
-    // Add the custom item details to the cart using the context
     addItem({
-        id: customItemId,
-        title: `Custom Comic ${comicId ? `(Based on ID ${comicId.substring(0,5)}...)` : ''}`, // More descriptive title
-        price: CUSTOM_COMIC_PRICE, // Use the defined price
+        id: customItemId, // Use string ID for custom items
+        // Include base comic ID in title if valid number
+        title: `Custom Comic ${baseComicId && !isNaN(baseComicId) ? `(Based on #${baseComicId})` : ''}`,
+        price: CUSTOM_COMIC_PRICE,
         quantity: 1,
-        imageUrl: uploadedImageUrl, // Use the URL returned by the API
+        imageUrl: uploadedImageUrl,
         isCustom: true,
         notes: data.notes,
     });
 
-    setIsSubmitting(false); // Stop general loading state
-    // Toast for adding to cart is handled by the addItem function in CartContext
-
-    // Redirect to the cart page after adding
+    setIsSubmitting(false);
     router.push('/cart');
   };
 
@@ -124,12 +118,11 @@ function CustomizePageContent() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            {/* Ensure onSubmit uses the correct handler */}
             <form onSubmit={form.handleSubmit(onSubmitCustomization)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="imageFile"
-                render={({ field }) => ( // field doesn't have value for file input, use onChange handler
+                render={({ field }) => (
                   <FormItem>
                     <FormLabel
                         htmlFor="image-upload"
@@ -146,10 +139,8 @@ function CustomizePageContent() {
                         id="image-upload"
                         type="file"
                         accept="image/*"
-                        // Use custom onChange handler instead of field.onChange
                         onChange={handleImageChange}
-                        // ref={field.ref} // Keep ref if needed, but value/onChange are handled differently
-                        className="hidden" // Hide the default input
+                        className="hidden"
                         disabled={isUploading || isSubmitting}
                       />
                     </FormControl>
@@ -195,7 +186,6 @@ function CustomizePageContent() {
               />
 
               <CardFooter className="p-0 pt-6">
-                 {/* Ensure button uses the correct loading state */}
                 <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isUploading || isSubmitting || !form.formState.isValid}>
                   {isSubmitting ? (
                     <>

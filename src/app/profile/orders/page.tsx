@@ -1,4 +1,3 @@
-
 'use client';
 
 import type React from 'react';
@@ -7,18 +6,19 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns'; // For date formatting
+import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { getUserOrders, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service'; // Import getUserOrders
-import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw } from 'lucide-react'; // Added icons for status
+import { getUserOrders, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
+import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw } from 'lucide-react';
+import { cn } from '@/lib/utils'; // Import cn
 
-// Status Badge Component (similar to admin panel, reuse or abstract later)
+// Status Badge Component (Reused)
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
     let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
     let icon = <Info className="h-3 w-3 mr-1" />;
@@ -29,12 +29,12 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
             icon = <RefreshCcw className="h-3 w-3 mr-1 animate-spin animation-duration-2000" />;
             break;
         case 'In Production':
-            variant = "default"; // Using primary color
+            variant = "default";
              icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
             break;
         case 'Completed':
-            variant = "secondary"; // Using accent color via theme
-             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />; // Specific color for check
+            variant = "secondary"; // Using theme accent color (teal)
+             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />;
             break;
          case 'Cancelled':
             variant = "destructive";
@@ -43,7 +43,7 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
     }
 
     return (
-        <Badge variant={variant} className="flex items-center text-xs whitespace-nowrap capitalize">
+        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize")}>
             {icon}
             {status}
         </Badge>
@@ -51,10 +51,11 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
 };
 
 
+// Order Item Display Component (Improved)
 function OrderItemDisplay({ item }: { item: OrderItem }) {
   return (
     <div className="flex items-center gap-4 py-2 border-b last:border-b-0">
-      <div className="relative w-12 h-16 flex-shrink-0">
+      <div className="relative w-12 h-16 flex-shrink-0 bg-muted rounded">
         {item.imageUrl ? (
           <Image
             src={item.imageUrl}
@@ -66,16 +67,19 @@ function OrderItemDisplay({ item }: { item: OrderItem }) {
             sizes="48px"
           />
         ) : (
-          <div className="w-full h-full bg-muted rounded flex items-center justify-center text-muted-foreground text-xs p-1">
-             {item.isCustom ? 'Custom' : 'No Img'}
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs p-1 text-center">
+             {item.isCustom ? 'Custom' : 'No Image'}
           </div>
         )}
       </div>
       <div className="flex-grow min-w-0">
         <p className="font-medium truncate">{item.title}</p>
-        <p className="text-xs text-muted-foreground">Type: {item.isCustom ? 'Customized' : 'Standard'}</p>
+        <p className="text-xs text-muted-foreground">
+          ID: <span className="font-mono text-[11px]">{typeof item.productId === 'number' ? item.productId : `${item.productId.substring(0,10)}...`}</span>
+        </p>
+         <p className="text-xs text-muted-foreground">Type: {item.isCustom ? 'Customized' : 'Standard'}</p>
         {item.isCustom && item.notes && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">Notes: {item.notes}</p>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1" title={item.notes}>Notes: {item.notes}</p>
         )}
          <p className="text-xs text-muted-foreground">Qty: {item.quantity} @ ${item.price.toFixed(2)}</p>
       </div>
@@ -90,7 +94,6 @@ function OrdersPageContent() {
   const { user, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
 
-   // Route Protection Effect
   useEffect(() => {
     if (!isAuthLoading && !user) {
       toast({
@@ -98,24 +101,23 @@ function OrdersPageContent() {
         description: 'Please log in to view your orders.',
         variant: 'destructive',
       });
-      router.push('/login?redirect=/profile/orders'); // Redirect to login, store intended destination
+      router.push('/login?redirect=/profile/orders');
     }
   }, [user, isAuthLoading, router, toast]);
 
-
-  // Fetch orders using useQuery, enabled only when user is loaded and exists
+  // Fetch orders using useQuery, enabled only when user is loaded and exists with a numeric ID
+  const isUserValid = !!user && typeof user.id === 'number';
   const { data: orders, isLoading: isOrdersLoading, error, isError } = useQuery<UserOrder[], Error>({
-    queryKey: ['userOrders', user?.email], // Include user identifier in query key
+    queryKey: ['userOrders', user?.id], // Use numeric user ID in query key
     queryFn: () => {
-      if (!user) throw new Error("User not authenticated"); // Should not happen due to protection, but for type safety
-      return getUserOrders(user.email); // Fetch orders for the logged-in user via API
+      if (!user || typeof user.id !== 'number') throw new Error("User not authenticated or invalid user ID");
+      return getUserOrders(user.id); // Fetch orders for the logged-in user via API using numeric ID
     },
-    enabled: !!user && !isAuthLoading, // Only run query if user is loaded and exists
-    staleTime: 1000 * 60 * 2, // Cache user orders for 2 minutes
+    enabled: isUserValid && !isAuthLoading, // Only run query if user is valid and loaded
+    staleTime: 1000 * 60 * 2,
   });
 
 
-  // Loading States
   if (isAuthLoading) {
     return (
       <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
@@ -125,7 +127,6 @@ function OrdersPageContent() {
     );
   }
 
-   // If user check completed and still no user (should have been redirected, but as fallback)
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
@@ -134,21 +135,18 @@ function OrdersPageContent() {
     );
   }
 
-  // Order Loading State
-   if (isOrdersLoading) {
+   if (isOrdersLoading && isUserValid) { // Only show loading if query is actually running
      return (
         <div className="container mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold mb-6 text-center">My Orders</h1>
+          <h1 className="text-3xl font-bold mb-8 text-center">My Orders</h1>
            <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="ml-3 text-muted-foreground">Loading your orders...</span>
            </div>
-          {/* Optional: Skeleton can be added back here if preferred */}
         </div>
      );
    }
 
-   // Order Error State
    if (isError) {
      console.error("Error fetching user orders:", error);
      return (
@@ -161,25 +159,24 @@ function OrdersPageContent() {
      );
    }
 
-   // Main Content
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8 text-center">My Orders</h1>
 
       {orders && orders.length > 0 ? (
         <div className="space-y-6 max-w-4xl mx-auto">
-          {orders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
-                 .map((order) => (
+          {/* Orders are already sorted by API/service */}
+          {orders.map((order) => (
             <Card key={order.id} className="shadow-md overflow-hidden">
               <CardHeader className="bg-muted/50 p-4 border-b">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                     <div>
                         <CardTitle className="text-lg flex items-center gap-2">
-                             <span>Order ID: {order.id.substring(0, 15)}...</span>
+                             <span className="truncate" title={`Order ID: ${order.id}`}>Order ID: {order.id}</span>
                              <StatusBadge status={order.status} />
                         </CardTitle>
                         <CardDescription className="text-sm mt-1">
-                           Placed on: {format(new Date(order.date), 'PPP p')} {/* Format date */}
+                           Placed on: {format(new Date(order.date), 'PPP p')}
                         </CardDescription>
                     </div>
                     <p className="text-lg font-semibold text-right sm:text-left mt-2 sm:mt-0">
@@ -188,14 +185,14 @@ function OrdersPageContent() {
                 </div>
               </CardHeader>
               <CardContent className="p-4 space-y-2">
-                 <h4 className="text-md font-semibold mb-2">Items:</h4>
+                 <h4 className="text-md font-semibold mb-2">Items ({order.items.length}):</h4>
                  {order.items.map((item, index) => (
+                     // Use a more robust key combining order and item identifiers
                     <OrderItemDisplay key={`${order.id}-${item.productId}-${index}`} item={item} />
                  ))}
               </CardContent>
-              {/* Optional Footer for actions */}
               {/* <CardFooter className="p-4 bg-muted/50 border-t flex justify-end">
-                <Button variant="outline" size="sm">View Details</Button>
+                 Optionally add actions like "Track Order" or "Reorder"
               </CardFooter> */}
             </Card>
           ))}
@@ -215,6 +212,5 @@ function OrdersPageContent() {
 
 
 export default function OrdersPage() {
-  // Providers wrapper handles context and query client
   return <OrdersPageContent />;
 }

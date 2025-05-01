@@ -18,13 +18,19 @@ function ComicDetailsPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const { addItem } = useCart(); // Get addItem function
-  const comicId = params.id as string;
+  const comicIdParam = params.id as string; // ID from URL is string
+
+  // Attempt to parse ID as number
+  const comicId = parseInt(comicIdParam, 10);
+  const isIdValid = !isNaN(comicId);
 
    // Fetch the specific comic by ID using useQuery
   const { data: comic, isLoading, error, isError } = useQuery<Comic | null, Error>({
-    queryKey: ['comic', comicId], // Query key includes the comic ID
-    queryFn: () => getComicById(comicId), // Fetch function using the ID
-    enabled: !!comicId, // Only run query if comicId exists
+    // Query key includes the numeric ID
+    queryKey: ['comic', comicId],
+    // Fetch function using the numeric ID, only run if ID is valid
+    queryFn: () => getComicById(comicId),
+    enabled: isIdValid, // Only run query if comicId is a valid number
     staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
   });
 
@@ -32,14 +38,13 @@ function ComicDetailsPageContent() {
    const handleAddToCart = () => {
     if (comic) {
         addItem({
-            id: comic.id,
+            id: comic.id, // Use numeric ID from Prisma Product
             title: comic.title,
             price: comic.price,
             quantity: 1,
             imageUrl: comic.imageUrl || `https://picsum.photos/seed/${comic.id}/100/150`,
             isCustom: false,
         });
-         // Toast is now handled in CartContext
     } else {
          toast({
             title: 'Error adding to cart',
@@ -48,6 +53,20 @@ function ComicDetailsPageContent() {
          });
     }
   };
+
+  // Handle invalid ID case early
+  if (!isIdValid) {
+     return (
+        <div className="container mx-auto px-4 py-8 text-center text-destructive">
+          <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
+          <p className="text-lg font-semibold mb-2">Invalid Comic ID</p>
+          <p className="text-muted-foreground mb-4">The requested comic ID is not valid.</p>
+          <Button variant="outline" onClick={() => router.back()}>
+             <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
+          </Button>
+        </div>
+      );
+  }
 
 
   if (isLoading) {
@@ -74,7 +93,6 @@ function ComicDetailsPageContent() {
   }
 
   if (isError) {
-    // Error handled by useQuery, display message
     console.error(`Error fetching comic ${comicId}:`, error);
      return (
         <div className="container mx-auto px-4 py-8 text-center text-destructive">
@@ -124,7 +142,8 @@ function ComicDetailsPageContent() {
          {/* Details Column */}
         <div className="space-y-6">
           <h1 className="text-3xl font-bold">{comic.title}</h1>
-          <p className="text-lg text-muted-foreground">Category: {comic.category}</p>
+          {/* Assuming 'type' field exists, otherwise use category or remove */}
+          <p className="text-lg text-muted-foreground">Type: {comic.type || 'N/A'}</p>
           <p className="text-2xl font-bold text-accent-foreground bg-accent inline-block px-3 py-1 rounded-md">${comic.price.toFixed(2)}</p>
           <Card>
             <CardHeader>

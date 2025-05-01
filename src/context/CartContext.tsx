@@ -5,20 +5,20 @@ import { createContext, useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export interface CartItem {
-  id: string; // Can be comic ID or custom ID
+  id: string | number; // Allow both Product ID (number) and custom ID (string)
   title: string;
   price: number;
   quantity: number;
-  imageUrl?: string; // Optional image
-  isCustom?: boolean; // Flag for custom items
-  notes?: string; // Notes for custom items
+  imageUrl?: string;
+  isCustom?: boolean;
+  notes?: string;
 }
 
 interface CartContextType {
   cartItems: CartItem[];
   addItem: (item: CartItem) => void;
-  removeItem: (itemId: string) => void;
-  updateQuantity: (itemId: string, quantity: number) => void;
+  removeItem: (itemId: string | number) => void; // Accept string or number
+  updateQuantity: (itemId: string | number, quantity: number) => void; // Accept string or number
   clearCart: () => void;
   cartCount: number;
   totalPrice: number;
@@ -41,7 +41,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error reading cart state from localStorage:", error);
-      localStorage.removeItem(CART_STORAGE_KEY); // Clear potentially corrupted storage
+      localStorage.removeItem(CART_STORAGE_KEY);
     }
   }, []);
 
@@ -59,7 +59,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setCartItems((prevItems) => {
       const existingItemIndex = prevItems.findIndex(i => i.id === itemToAdd.id);
       if (existingItemIndex > -1) {
-        itemExists = true; // Mark that item existed
+        itemExists = true;
         const updatedItems = [...prevItems];
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
@@ -67,66 +67,57 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         };
         return updatedItems;
       } else {
-        itemExists = false; // Mark that item is new
+        itemExists = false;
         return [...prevItems, itemToAdd];
       }
     });
 
-    // Call toast *after* the state update is queued
+    // Call toast after the state update is queued
     if (itemExists) {
         toast({ title: `${itemToAdd.title} quantity updated in cart.` });
     } else {
         toast({ title: `${itemToAdd.title} added to cart.` });
     }
-  }, [toast]); // Dependency array is correct
+  }, [toast]);
 
 
-  const removeItem = useCallback((itemId: string) => {
+  const removeItem = useCallback((itemId: string | number) => {
     let removedItemTitle: string | null = null;
     setCartItems((prevItems) => {
       const itemToRemove = prevItems.find(i => i.id === itemId);
       if (itemToRemove) {
-          removedItemTitle = itemToRemove.title; // Store title for toast
+          removedItemTitle = itemToRemove.title;
       }
       return prevItems.filter(item => item.id !== itemId);
     });
 
-    // Call toast *after* the state update is queued
     if (removedItemTitle) {
         toast({ title: `${removedItemTitle} removed from cart.`, variant: 'destructive' });
     }
-  }, [toast]); // Dependency array is correct
+  }, [toast]);
 
 
-  const updateQuantity = useCallback((itemId: string, quantity: number) => {
+  const updateQuantity = useCallback((itemId: string | number, quantity: number) => {
     setCartItems((prevItems) => {
        const itemToUpdate = prevItems.find(item => item.id === itemId);
        let updatedItems = prevItems;
 
       if (quantity <= 0) {
-        // Remove item if quantity is 0 or less
         updatedItems = prevItems.filter(item => item.id !== itemId);
-        if (itemToUpdate) {
-             // Call toast *after* calculation, before returning state
-             // This seems acceptable as it's not directly inside the state setter update function logic like before
-            // toast({ title: `${itemToUpdate.title} removed from cart.`, variant: 'destructive' }); // Potentially noisy, removing for now
-        }
       } else {
           updatedItems = prevItems.map(item =>
              item.id === itemId ? { ...item, quantity } : item
            );
       }
-      return updatedItems; // Return the new state
+      return updatedItems;
     });
-     // Toast for quantity update could be added here if needed, but might be too noisy.
-  }, []); // Removed toast dependency as it's not called here
+  }, []);
 
 
  const clearCart = useCallback(() => {
-    setCartItems([]); // Queue state update
-    // Call toast *after* state update is queued
+    setCartItems([]);
     toast({ title: 'Cart Cleared' });
-  }, [toast]); // Dependency array is correct
+  }, [toast]);
 
 
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
