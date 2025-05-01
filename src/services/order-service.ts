@@ -1,6 +1,5 @@
 
-'use client'; // Indicate this interacts with browser APIs (localStorage)
-
+// Keep types consistent with CartContext and potential future DB schema
 import type { CartItem } from '@/hooks/useCart';
 
 // Define possible order statuses
@@ -11,9 +10,9 @@ export interface OrderItem extends Omit<CartItem, 'id'> {
   productId: string; // Keep track of the original product/custom ID
 }
 
-// Interface for a complete user order
+// Interface for a complete user order (as returned by the API)
 export interface UserOrder {
-  id: string; // Unique order ID (e.g., timestamp or simple UUID)
+  id: string; // Unique order ID
   userId: string; // Associate order with a user (using email for mock)
   customerName?: string; // Store customer name for display
   date: string; // ISO date string when the order was placed
@@ -22,67 +21,72 @@ export interface UserOrder {
   status: OrderStatus; // Add status field
 }
 
-// Change storage key to represent all orders
-const ORDERS_STORAGE_KEY = 'comicHubAllOrders';
+// No more localStorage interactions here. Everything goes through the API.
 
-// Helper function to get all orders from localStorage
-const getAllOrdersFromStorage = (): UserOrder[] => {
+/**
+ * Retrieves all orders from the API.
+ * Note: In a real app, this might need filtering by user ID or role.
+ * @returns A promise that resolves to an array of UserOrder objects.
+ */
+export async function getAllOrders(): Promise<UserOrder[]> {
+    console.log('Fetching all orders from API...');
     try {
-        const storedOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
-        return storedOrders ? JSON.parse(storedOrders) : [];
+        const response = await fetch('/api/orders');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch orders: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data as UserOrder[];
     } catch (error) {
-        console.error("Error reading orders from localStorage:", error);
-        return [];
+        console.error("Error in getAllOrders:", error);
+        return []; // Return empty array on failure
     }
-};
-
-// Helper function to save all orders to localStorage
-const saveAllOrdersToStorage = (orders: UserOrder[]): void => {
-    try {
-        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
-    } catch (error) {
-        console.error("Error saving orders to localStorage:", error);
-    }
-};
+}
 
 
 /**
- * Retrieves mock orders for a specific user from the global localStorage store.
- * Simulates fetching user-specific data.
+ * Retrieves orders for a specific user by filtering the result of getAllOrders.
+ * In a real API, you'd ideally have an endpoint like /api/orders?userId=...
  * @param userId - The ID of the user (using email for mock).
  * @returns A promise that resolves to an array of UserOrder objects.
  */
 export async function getUserOrders(userId: string): Promise<UserOrder[]> {
-  console.log(`Fetching orders for user ${userId} (mock)...`);
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const allOrders = getAllOrdersFromStorage();
-  // Filter orders belonging to the specified user
-  const userOrders = allOrders.filter(order => order.userId === userId);
-  return userOrders;
+  console.log(`Fetching orders for user ${userId} via API...`);
+  // Simulate filtering on the client side after fetching all orders
+  // In a real app, the API should support filtering by userId
+  try {
+    const allOrders = await getAllOrders(); // Fetch all orders first
+    const userOrders = allOrders.filter(order => order.userId === userId);
+    return userOrders;
+  } catch (error) {
+      console.error(`Error fetching or filtering orders for user ${userId}:`, error);
+      return [];
+  }
 }
 
 /**
- * Retrieves all custom orders from the global localStorage store.
+ * Retrieves all custom orders by filtering the result of getAllOrders.
+ * In a real API, you'd ideally have an endpoint like /api/orders?isCustom=true
  * @returns A promise that resolves to an array of UserOrder objects containing at least one custom item.
  */
 export async function getAllCustomOrders(): Promise<UserOrder[]> {
-    console.log(`Fetching all custom orders (mock)...`);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 400));
-
-    const allOrders = getAllOrdersFromStorage();
-    // Filter for orders that contain at least one custom item
-    const customOrders = allOrders.filter(order =>
-        order.items.some(item => item.isCustom)
-    );
-    return customOrders;
+    console.log(`Fetching all custom orders via API...`);
+    // Simulate filtering on the client side
+     try {
+        const allOrders = await getAllOrders(); // Fetch all orders first
+        const customOrders = allOrders.filter(order =>
+            order.items.some(item => item.isCustom)
+        );
+        return customOrders;
+     } catch (error) {
+         console.error("Error fetching or filtering custom orders:", error);
+         return [];
+     }
 }
 
 
 /**
- * Adds a new mock order to the global localStorage store.
+ * Adds a new order by calling the POST /api/orders endpoint.
  * @param userId - The ID of the user placing the order.
  * @param customerName - The name of the customer placing the order.
  * @param cartItems - The items in the cart at the time of checkout.
@@ -90,56 +94,64 @@ export async function getAllCustomOrders(): Promise<UserOrder[]> {
  * @returns A promise that resolves with the newly created order.
  */
 export async function addOrder(userId: string, customerName: string, cartItems: CartItem[], orderTotalPrice: number): Promise<UserOrder> {
-  console.log(`Adding new order for user ${userId} (mock)...`);
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  console.log(`Adding new order for user ${userId} via API...`);
 
-  const newOrder: UserOrder = {
-    id: `order-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    userId: userId,
-    customerName: customerName,
-    date: new Date().toISOString(),
-    items: cartItems.map(item => ({
-      productId: item.id, // Map CartItem.id to OrderItem.productId
-      title: item.title,
-      price: item.price, // Price at the time of order
-      quantity: item.quantity,
-      imageUrl: item.imageUrl,
-      isCustom: item.isCustom,
-      notes: item.notes,
-    })),
-    totalPrice: orderTotalPrice,
-    status: 'Pending', // Default status for new orders
-  };
+  const response = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+          userId,
+          customerName,
+          cartItems,
+          orderTotalPrice,
+      }),
+  });
 
-  const allOrders = getAllOrdersFromStorage();
-  allOrders.push(newOrder);
-  saveAllOrdersToStorage(allOrders);
-  console.log('Order added:', newOrder);
-  return newOrder;
+  const data = await response.json();
+
+   if (!response.ok) {
+        // Use message from API response if available, otherwise default
+        throw new Error(data.message || `Failed to add order: ${response.statusText}`);
+    }
+
+   // Validate response structure (optional but good practice)
+   if (!data.id || !data.items) {
+       throw new Error('Invalid order data received from API after creation.');
+   }
+
+  console.log('Order added via API:', data);
+  return data as UserOrder;
 }
 
 
 /**
- * Updates the status of a specific order in the global localStorage store.
+ * Updates the status of a specific order by calling the PATCH /api/orders/:orderId/status endpoint.
  * @param orderId - The ID of the order to update.
  * @param newStatus - The new status for the order.
- * @returns A promise that resolves when the status is updated, or rejects if the order is not found.
+ * @returns A promise that resolves with the updated order.
  */
 export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<UserOrder> {
-    console.log(`Updating status for order ${orderId} to ${newStatus} (mock)...`);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 200));
+    console.log(`Updating status for order ${orderId} to ${newStatus} via API...`);
 
-    const allOrders = getAllOrdersFromStorage();
-    const orderIndex = allOrders.findIndex(order => order.id === orderId);
+    const response = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+    });
 
-    if (orderIndex === -1) {
-        throw new Error(`Order with ID ${orderId} not found.`);
+    const data = await response.json();
+
+     if (!response.ok) {
+        // Use message from API response if available, otherwise default
+        throw new Error(data.message || `Failed to update order status: ${response.statusText}`);
     }
 
-    allOrders[orderIndex].status = newStatus;
-    saveAllOrdersToStorage(allOrders);
-    console.log('Order status updated:', allOrders[orderIndex]);
-    return allOrders[orderIndex];
+    // Validate response structure (optional but good practice)
+    if (!data.id || data.status !== newStatus) {
+       throw new Error('Invalid order data received from API after status update.');
+   }
+
+
+    console.log('Order status updated via API:', data);
+    return data as UserOrder;
 }

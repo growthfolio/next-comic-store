@@ -10,95 +10,55 @@ export interface Comic {
   category: string;
 }
 
-// More diverse mock data
-const mockComics: Comic[] = [
-    {
-      id: '1',
-      title: 'Cosmic Crusaders #1',
-      // imageUrl: 'https://picsum.photos/seed/cosmic1/400/600', // Use picsum for placeholders
-      price: 4.99,
-      description: 'The start of a new galactic saga! Join the Crusaders as they defend the galaxy from the Void Lord.',
-      category: 'Sci-Fi Superhero',
-    },
-    {
-      id: '2',
-      title: 'Midnight Detective: Case Files',
-      // imageUrl: 'https://picsum.photos/seed/detective2/400/600',
-      price: 5.50,
-      description: 'A gritty noir tale set in the rain-soaked streets of Neo-Veridia. Can Detective Harding solve the case before the city consumes him?',
-      category: 'Noir',
-    },
-    {
-      id: '3',
-      title: 'Chronicles of Atheria: The Lost Kingdom',
-      // imageUrl: 'https://picsum.photos/seed/atheria3/400/600',
-      price: 6.99,
-      description: 'Embark on an epic fantasy adventure to uncover the secrets of a long-lost civilization.',
-      category: 'Fantasy',
-    },
-    {
-      id: '4',
-      title: 'Quantum Leapfrog',
-      // imageUrl: 'https://picsum.photos/seed/quantum4/400/600',
-      price: 3.99,
-      description: 'A quirky, mind-bending journey through time and space with an unlikely hero.',
-      category: 'Sci-Fi Comedy',
-    },
-     {
-      id: '5',
-      title: 'Guardians of the Metropolis',
-      // imageUrl: 'https://picsum.photos/seed/guardians5/400/600',
-      price: 4.50,
-      description: 'Classic superhero action protecting the bustling city from supervillains.',
-      category: 'Superhero',
-    },
-    {
-      id: '6',
-      title: 'The Whispering Woods',
-      // imageUrl: 'https://picsum.photos/seed/woods6/400/600',
-      price: 5.99,
-      description: 'A haunting horror story about campers who venture too deep into the ancient forest.',
-      category: 'Horror',
-    },
-     {
-      id: '7',
-      title: 'Robo-Rampage',
-      // imageUrl: 'https://picsum.photos/seed/robo7/400/600',
-      price: 4.00,
-      description: 'Giant robots clash in a battle for the future!',
-      category: 'Mecha',
-    },
-    {
-      id: '8',
-      title: 'Slice of Life: Cafe Moments',
-      // imageUrl: 'https://picsum.photos/seed/cafe8/400/600',
-      price: 3.50,
-      description: 'Heartwarming stories centered around a cozy neighborhood cafe.',
-      category: 'Slice of Life',
-    },
-];
-
+// Mock data is now handled by the API route /api/products
 
 /**
- * Asynchronously retrieves a list of comic book products.
- * Simulates API delay.
+ * Asynchronously retrieves a list of comic book products from the API.
  * @returns A promise that resolves to an array of Comic objects.
  */
 export async function getComics(): Promise<Comic[]> {
-  console.log('Fetching comics (mock)...');
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  // In a real app, this would be an fetch call:
-  // const response = await fetch('/api/produtos');
-  // if (!response.ok) {
-  //   throw new Error('Failed to fetch comics');
-  // }
-  // return await response.json();
-  return mockComics;
+  console.log('Fetching comics from API...');
+  try {
+    const response = await fetch('/api/products'); // Fetch from the new API endpoint
+    if (!response.ok) {
+      throw new Error(`Failed to fetch comics: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data as Comic[];
+  } catch (error) {
+      console.error("Error in getComics:", error);
+      // Optionally return empty array or re-throw specific error type
+      return []; // Return empty array on error to avoid breaking UI components expecting an array
+  }
 }
 
 /**
+ * Asynchronously retrieves details for a specific comic book product from the API.
+ * @param id The ID of the comic to fetch.
+ * @returns A promise that resolves to a Comic object or null if not found.
+ */
+export async function getComicById(id: string): Promise<Comic | null> {
+    console.log(`Fetching comic ${id} from API...`);
+    try {
+        const response = await fetch(`/api/products/${id}`); // Fetch from the specific product API endpoint
+        if (!response.ok) {
+            if (response.status === 404) {
+                return null; // Comic not found
+            }
+            throw new Error(`Failed to fetch comic ${id}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data as Comic;
+    } catch (error) {
+        console.error(`Error in getComicById (${id}):`, error);
+        return null; // Return null on error
+    }
+}
+
+
+/**
  * Represents the data needed to create a customized comic book order.
+ * (Keeping this interface, but submission logic will change)
  */
 export interface CustomComicOrder {
   image: string; // URL of the uploaded image
@@ -107,55 +67,48 @@ export interface CustomComicOrder {
 }
 
 /**
- * Asynchronously submits a custom comic book order.
- * Simulates API delay.
+ * Asynchronously submits a custom comic book order (will be handled by addOrder).
+ * This function might be deprecated or adapted later.
  * @param order The custom comic order data.
  * @returns A promise that resolves when the order is successfully submitted.
  */
 export async function submitCustomComicOrder(order: CustomComicOrder): Promise<void> {
-  console.log('Submitting custom comic order (mock):', order);
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  // In a real app:
-  // const response = await fetch('/api/pedido/personalizado', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(order),
-  // });
-  // if (!response.ok) {
-  //   throw new Error('Failed to submit custom order');
-  // }
-  // Simulate success
+  console.warn('submitCustomComicOrder is deprecated. Use addOrder via the /api/orders endpoint.');
+  // This function's logic should be integrated into the checkout process that calls POST /api/orders
+  // For now, just log a warning.
+  await new Promise(resolve => setTimeout(resolve, 100)); // Simulate quick operation
   return;
 }
 
 /**
- * Asynchronously uploads an image to the backend.
- * Simulates API delay and returns a placeholder URL.
+ * Asynchronously uploads an image using the API endpoint.
  * @param image The image file to upload.
  * @returns A promise that resolves to the URL of the uploaded image.
  */
 export async function uploadImage(image: File): Promise<string> {
-  console.log('Uploading image (mock):', image.name, image.size);
-  // Simulate network delay and upload process
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  console.log('Uploading image via API:', image.name);
+  try {
+    const formData = new FormData();
+    formData.append('image', image); // Use 'image' as the key the API expects
 
-  // In a real app:
-  // const formData = new FormData();
-  // formData.append('image', image);
-  // const response = await fetch('/api/upload', {
-  //   method: 'POST',
-  //   body: formData,
-  // });
-  // if (!response.ok) {
-  //   throw new Error('Image upload failed');
-  // }
-  // const result = await response.json();
-  // return result.imageUrl;
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-  // Simulate a successful upload returning a placeholder URL
-  const randomId = Math.random().toString(36).substring(7);
-  const mockUrl = `https://picsum.photos/seed/${randomId}/600/900`; // Using picsum as placeholder
-  console.log('Mock upload complete. URL:', mockUrl);
-  return mockUrl;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Unknown upload error' }));
+      throw new Error(`Image upload failed: ${response.statusText} - ${errorData.message}`);
+    }
+
+    const result = await response.json();
+    if (!result.imageUrl) {
+        throw new Error('API did not return an imageUrl for the uploaded image.');
+    }
+    console.log('API upload complete. URL:', result.imageUrl);
+    return result.imageUrl;
+  } catch (error) {
+      console.error("Error in uploadImage:", error);
+      throw error; // Re-throw the error to be handled by the calling component
+  }
 }

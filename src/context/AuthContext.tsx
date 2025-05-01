@@ -1,17 +1,14 @@
+// src/context/AuthContext.tsx
 'use client';
 
 import type React from 'react';
 import { createContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
-import { login as apiLogin, register as apiRegister, type LoginCredentials, type RegisterInfo } from '@/services/auth-service';
+import { login as apiLogin, register as apiRegister, type LoginCredentials, type RegisterInfo, type User, type AuthResponse } from '@/services/auth-service';
 import { useToast } from '@/hooks/use-toast';
 
 
-interface User {
-  name: string;
-  email: string;
-  isAdmin?: boolean; // Add isAdmin flag
-}
+// No need to redefine User interface here, it's imported from auth-service
 
 interface AuthContextType {
   user: User | null;
@@ -26,7 +23,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_TOKEN_KEY = 'comicHubAuthToken';
 const USER_INFO_KEY = 'comicHubUserInfo';
-const ADMIN_EMAIL = 'admin@comichub.com'; // Define an admin email for mocking
+// No longer need ADMIN_EMAIL here, isAdmin comes from API user object
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -35,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Check for existing token/user info in localStorage on mount
+  // Check for existing token/user info in localStorage on mount (remains the same)
   useEffect(() => {
     try {
       const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -58,48 +55,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     try {
       setIsLoading(true);
-      const { token: authToken } = await apiLogin(credentials); // Get token from mock service
+      // Call the API service function
+      const { token: authToken, user: userInfo }: AuthResponse = await apiLogin(credentials);
       setToken(authToken);
-
-      // Mock user info based on email (in real app, get from API)
-      const isAdmin = credentials.email.toLowerCase() === ADMIN_EMAIL;
-      const userInfo: User = {
-          name: credentials.email.split('@')[0] || 'User',
-          email: credentials.email,
-          isAdmin: isAdmin
-      };
-      setUser(userInfo);
+      setUser(userInfo); // User info now comes directly from the API response
 
       localStorage.setItem(AUTH_TOKEN_KEY, authToken);
       localStorage.setItem(USER_INFO_KEY, JSON.stringify(userInfo));
       setIsLoading(false);
+      // Success toast can be handled here or in the calling component
+      toast({ title: 'Login Successful', description: `Welcome back, ${userInfo.name}!` });
     } catch (error) {
         setIsLoading(false);
-        throw error; // Re-throw for the page to handle
+        console.error('AuthContext Login Error:', error);
+        toast({ title: 'Login Failed', description: (error as Error).message || 'An unexpected error occurred.', variant: 'destructive'});
+        // Do not re-throw here, handle UI feedback within the context/hook consumers
     }
-  }, [router, toast]); // No need for toast here, handled in page
+  }, [router, toast]); // Dependencies updated
 
   const register = useCallback(async (info: RegisterInfo) => {
     try {
         setIsLoading(true);
-         // Prevent registering the admin email
-        if (info.email.toLowerCase() === ADMIN_EMAIL) {
-            throw new Error(`Cannot register with the admin email address.`);
-        }
-        const { token: authToken } = await apiRegister(info); // Get token from mock service
+         // Call the API service function
+        const { token: authToken, user: userInfo }: AuthResponse = await apiRegister(info);
         setToken(authToken);
-
-        const userInfo: User = { name: info.name, email: info.email, isAdmin: false }; // New users are not admins
-        setUser(userInfo);
+        setUser(userInfo); // User info now comes directly from the API response
 
         localStorage.setItem(AUTH_TOKEN_KEY, authToken);
         localStorage.setItem(USER_INFO_KEY, JSON.stringify(userInfo));
         setIsLoading(false);
+        // Success toast can be handled here or in the calling component
+        toast({ title: 'Registration Successful', description: `Welcome to ComicHub, ${userInfo.name}!` });
     } catch (error) {
         setIsLoading(false);
-        throw error; // Re-throw for the page to handle
+        console.error('AuthContext Registration Error:', error);
+        toast({ title: 'Registration Failed', description: (error as Error).message || 'An unexpected error occurred.', variant: 'destructive'});
+         // Do not re-throw here
     }
-  }, [router, toast]); // No need for toast here, handled in page
+  }, [router, toast]); // Dependencies updated
 
 
   const logout = useCallback(() => {
@@ -109,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(USER_INFO_KEY);
     toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
     router.push('/'); // Redirect to home after logout
+     // Optional: Force a reload to ensure all state is cleared if needed
+     // window.location.reload();
   }, [router, toast]);
 
   const value = {
