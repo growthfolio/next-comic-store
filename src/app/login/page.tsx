@@ -1,8 +1,9 @@
+
 'use client';
 
 import type React from 'react';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation'; // Import useSearchParams
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -25,9 +26,19 @@ type LoginFormInputs = z.infer<typeof formSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const searchParams = useSearchParams(); // Get search params
+  const { login, user, isLoading: isAuthLoading } = useAuth(); // Get user and loading state
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const redirectPath = searchParams.get('redirect') || '/'; // Get redirect path or default to home
+
+   // If user is already logged in, redirect them
+   useEffect(() => {
+     if (!isAuthLoading && user) {
+       router.push(redirectPath);
+     }
+   }, [user, isAuthLoading, router, redirectPath]);
+
 
   const form = useForm<LoginFormInputs>({
     resolver: zodResolver(formSchema),
@@ -47,7 +58,7 @@ export default function LoginPage() {
         title: 'Login Successful',
         description: 'Welcome back!',
       });
-      router.push('/'); // Redirect to homepage
+      router.push(redirectPath); // Redirect to stored path or homepage
     } catch (error) {
       console.error('Login failed:', error);
       toast({
@@ -59,6 +70,19 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+   // Show loading indicator while checking auth state
+   if (isAuthLoading) {
+     return (
+       <div className="container mx-auto px-4 py-16 flex justify-center items-center min-h-[calc(100vh-10rem)]">
+         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+       </div>
+     );
+   }
+   // Avoid rendering form if user is already logged in and redirecting
+   if (user) {
+      return null;
+   }
 
   return (
     <div className="container mx-auto px-4 py-16 flex justify-center items-center min-h-[calc(100vh-10rem)]">

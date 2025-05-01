@@ -1,3 +1,4 @@
+
 'use client';
 
 import type React from 'react';
@@ -9,6 +10,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useCart } from '@/hooks/useCart'; // Import useCart
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { addOrder } from '@/services/order-service'; // Import addOrder service
 import { Loader2, CreditCard, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 
@@ -17,7 +20,21 @@ function CheckoutPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const { cartItems, totalPrice, cartCount, clearCart } = useCart(); // Get cart data from context
+  const { user, isLoading: isAuthLoading } = useAuth(); // Get user info
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Redirect to login if user is not authenticated and auth check is complete
+  useEffect(() => {
+      if (!isAuthLoading && !user) {
+          toast({
+              title: "Authentication Required",
+              description: "Please log in to proceed to checkout.",
+              variant: "destructive",
+          });
+          router.push('/login?redirect=/checkout'); // Redirect to login, store intended destination
+      }
+  }, [user, isAuthLoading, router, toast]);
+
 
   // Calculate derived values directly from context values
   const calculateTaxes = (subtotal: number) => {
@@ -30,19 +47,58 @@ function CheckoutPageContent() {
   const total = subtotal + taxes;
 
   const handleSimulatePayment = async () => {
+    if (!user) {
+        toast({ title: "Error", description: "User not found.", variant: "destructive" });
+        return;
+    }
+
     setIsProcessing(true);
     // Simulate API call for payment processing
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
 
-    // Simulate success
-    toast({
-      title: 'Payment Successful!',
-      description: 'Your order has been placed.',
-    });
-    setIsProcessing(false);
-    clearCart(); // Clear the cart using context function
-    router.push('/order-confirmation'); // Redirect to order confirmation page
+    try {
+        // Add order to mock order history
+        await addOrder(user.email, cartItems, total); // Use user email as ID for mock
+
+        // Simulate success
+        toast({
+          title: 'Payment Successful!',
+          description: 'Your order has been placed.',
+        });
+        clearCart(); // Clear the cart using context function
+        router.push('/order-confirmation'); // Redirect to order confirmation page
+
+    } catch (error) {
+        console.error("Failed to add order:", error);
+        toast({
+          title: 'Order Failed',
+          description: 'There was an issue placing your order. Please try again.',
+          variant: 'destructive',
+        });
+    } finally {
+        setIsProcessing(false);
+    }
+
   };
+
+  // Show loading spinner if auth is loading or processing payment
+  if (isAuthLoading || isProcessing) {
+      return (
+          <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          </div>
+      );
+  }
+
+  // If user check completed and still no user (should have been redirected, but as fallback)
+  if (!user) {
+       return (
+           <div className="container mx-auto px-4 py-8 text-center">
+               <p className="text-muted-foreground">Redirecting to login...</p>
+           </div>
+       );
+  }
+
 
   return (
     <div className="container mx-auto px-4 py-8 flex justify-center">
@@ -123,7 +179,7 @@ function CheckoutPageContent() {
             <Button
               onClick={handleSimulatePayment}
               className="w-full bg-accent hover:bg-accent/90"
-              disabled={isProcessing}
+              disabled={isProcessing || !user} // Disable if processing or user not loaded/logged in
             >
               {isProcessing ? (
                 <>
@@ -145,5 +201,6 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
+    // Providers wrapper already handles context
     return <CheckoutPageContent />;
 }
