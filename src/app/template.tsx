@@ -1,4 +1,5 @@
-// Removed 'use client' - Template can be a Server Component if no client-side hooks are directly used here.
+'use client'; // Ensure context is available for client components within the template
+
 import type React from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
