@@ -1,5 +1,8 @@
 import type { UserOrder, OrderStatus, OrderItem } from '@/services/order-service';
 
+// Define valid statuses including new ones
+const validStatuses: OrderStatus[] = ['Pending', 'Paid', 'Failed', 'In Production', 'Completed', 'Cancelled'];
+
 // Mock order items
 const mockOrderItems: OrderItem[] = [
     {
@@ -34,9 +37,9 @@ export let mockOrders: UserOrder[] = [
     date: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
     items: mockOrderItems, // Use the defined mock items
     totalPrice: mockOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    status: 'Completed',
-    customImageUrl: mockOrderItems.find(item => item.isCustom)?.imageUrl ?? null, // Get from custom item
-    notes: mockOrderItems.find(item => item.isCustom)?.notes ?? null, // Get from custom item
+    status: 'Completed', // Example completed order
+    customImageUrl: mockOrderItems.find(item => item.isCustom)?.imageUrl ?? null,
+    notes: mockOrderItems.find(item => item.isCustom)?.notes ?? null,
   },
   {
     id: 9002, // Another Mock Order ID
@@ -56,7 +59,7 @@ export let mockOrders: UserOrder[] = [
        }
     ],
     totalPrice: 5.50,
-    status: 'Pending',
+    status: 'Paid', // Example paid order waiting for production
     customImageUrl: null,
     notes: null,
   },
@@ -78,15 +81,14 @@ export let mockOrders: UserOrder[] = [
        },
     ],
     totalPrice: 25.00,
-    status: 'In Production',
+    status: 'In Production', // Example custom order in progress
     customImageUrl: 'https://picsum.photos/seed/mockCustomOnly/100/150',
     notes: 'This order only contains a custom item for admin panel testing.',
   }
 ];
 
 // Helper to add a mock order (simulates POST)
-// In a real mock setup, you might want this to modify the exported array,
-// but for simplicity here, it just returns a new mock order structure.
+// Returns a new mock order structure, initial status is 'Pending'.
 export function addMockOrder(userId: number, customerName: string, items: OrderItem[], totalPrice: number): UserOrder {
     const newOrderId = Math.max(0, ...mockOrders.map(o => o.id)) + 1;
     const newOrder: UserOrder = {
@@ -96,24 +98,28 @@ export function addMockOrder(userId: number, customerName: string, items: OrderI
         date: new Date().toISOString(),
         items: items.map((item, index) => ({ ...item, id: Date.now() + index })), // Assign temporary IDs
         totalPrice: totalPrice,
-        status: 'Pending',
+        status: 'Pending', // New orders start as Pending
          // Extract details from the first custom item if present
         customImageUrl: items.find(i => i.isCustom)?.imageUrl ?? null,
         notes: items.find(i => i.isCustom)?.notes ?? null,
     };
-     // IMPORTANT: In a real server, this would add to a persistent store.
-     // Here, we'll just log and return, not modifying the exported array directly
-     // to avoid complexities with module caching in some environments.
-     console.log("[Mock Mode] Simulating adding order:", newOrder);
-     // If you needed persistence across mock requests, you'd push to `mockOrders` here.
-     // mockOrders.push(newOrder);
+     // IMPORTANT: Modify the exported array directly for mock persistence across requests.
+     mockOrders.push(newOrder);
+     console.log("[Mock Mode] Added mock order:", newOrder);
      return newOrder;
 }
 
 // Helper to update mock order status (simulates PATCH)
 export function updateMockOrderStatus(orderId: number, newStatus: OrderStatus): UserOrder | null {
+    // Validate the status
+    if (!validStatuses.includes(newStatus)) {
+        console.error(`[Mock Mode] Invalid status update attempt: ${newStatus}`);
+        return null; // Or throw error
+    }
+
     const orderIndex = mockOrders.findIndex(o => o.id === orderId);
     if (orderIndex === -1) {
+        console.error(`[Mock Mode] Order ${orderId} not found for status update.`);
         return null;
     }
     // Update the status *in place* in the mock array

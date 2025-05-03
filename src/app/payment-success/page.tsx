@@ -1,4 +1,4 @@
-// src/app/order-confirmation/page.tsx
+// src/app/payment-success/page.tsx
 'use client';
 
 import type React from 'react';
@@ -10,44 +10,37 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CheckCircle, Package, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function OrderConfirmationPage() {
+export default function PaymentSuccessPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
   const orderId = searchParams.get('order_id');
-  const sessionId = searchParams.get('session_id'); // For potential Stripe confirmation
+  const sessionId = searchParams.get('session_id'); // For potential Stripe confirmation (though webhook is better)
   const isMock = searchParams.get('mock') === 'true';
-  const [isLoading, setIsLoading] = useState(!isMock); // Only potentially load if not mock
+  const [isLoading, setIsLoading] = useState(!isMock); // Only load if not mock (mock confirms instantly)
   const [error, setError] = useState<string | null>(null);
-  const [orderStatus, setOrderStatus] = useState<string | null>(null); // To display status if confirmed
 
   useEffect(() => {
-    // In a real scenario, you'd verify the payment status here if using the success URL method,
-    // or simply display success assuming the webhook handled confirmation.
-    // For this example, we assume confirmation happens elsewhere (webhook or mock API).
-
-    if (!orderId) {
-      setError("Order ID is missing from the URL.");
-      setIsLoading(false);
-      return;
-    }
-
-    if (isMock) {
-        // Mock payment was confirmed by the API route itself
-        setOrderStatus('Paid'); // Assume mock is always successful for this page
-        setIsLoading(false);
-    } else {
-        // For real payments, we *assume* success if they land here,
-        // but the true confirmation comes from the webhook updating the DB.
-        // We don't have the real-time DB status here without another fetch.
-        // For simplicity, just show success message.
-        console.log(`Order confirmation page loaded for order ${orderId}. Relying on webhook for DB update.`);
-        setOrderStatus('Processing'); // Indicate it might still be processing
-        setIsLoading(false); // Stop loading, show the generic success message
-    }
-
-    // Optional: Fetch order status if needed, but introduces complexity
-    // const fetchStatus = async () => { ... }; fetchStatus();
+      // If it's not a mock payment and we have a session ID,
+      // we might try to confirm payment here (though webhooks are preferred).
+      // For simplicity, we'll assume confirmation happens via webhook or mock API call.
+      // If it *is* a mock payment, the create-session API already marked it paid.
+      if (!isMock && sessionId) {
+          // Optional: Add a client-side check or confirmation if needed,
+          // but rely primarily on webhooks for real payments.
+          // For now, just stop loading.
+           setIsLoading(false);
+      } else if (isMock) {
+           setIsLoading(false); // Mock payment is confirmed by the API route directly
+      } else if (!orderId) {
+          setError("Order ID is missing from the URL.");
+          setIsLoading(false);
+      } else {
+           // If it's not mock and no session_id, something might be wrong
+           // For now, assume success if orderId exists, but log a warning.
+           console.warn("Reached success page without session_id (non-mock). Relying on webhook confirmation.");
+           setIsLoading(false);
+      }
 
   }, [orderId, sessionId, isMock, router]);
 
@@ -63,10 +56,10 @@ export default function OrderConfirmationPage() {
               <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
           )}
           <CardTitle className="text-2xl font-bold">
-            {isLoading ? 'Processing Payment...' : error ? 'Order Issue' : 'Order Confirmed!'}
+            {isLoading ? 'Processing Payment...' : error ? 'Payment Issue' : 'Payment Successful!'}
           </CardTitle>
           <CardDescription>
-            {isLoading ? 'Please wait while we confirm your order...' : error ? 'There was an issue with your order.' : 'Thank you for your purchase.'}
+            {isLoading ? 'Please wait while we confirm your payment...' : error ? 'There was an issue with your payment.' : 'Your order has been successfully placed.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -74,10 +67,8 @@ export default function OrderConfirmationPage() {
             <p className="text-destructive mb-6">{error}</p>
           ) : !isLoading && (
              <p className="text-muted-foreground mb-6">
-               {orderId ? `Your order #${orderId} has been received.` : 'Your order has been received.'}
-               {isMock && orderStatus === 'Paid' && " (Mock Payment Confirmed)"}
-               {!isMock && orderStatus === 'Processing' && " We'll notify you once payment is fully confirmed."}
-               {/* Display more specific messages based on fetched status if implemented */}
+               {orderId ? `Your order #${orderId} has been confirmed.` : 'Your order has been confirmed.'}
+               {isMock && " (Mock Payment)"}
              </p>
           )}
 

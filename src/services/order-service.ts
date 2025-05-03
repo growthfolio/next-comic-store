@@ -1,8 +1,8 @@
 import type { Order as PrismaOrder, Product, OrderItem as PrismaOrderItem, User as PrismaUser } from '@prisma/client';
 import type { CartItem } from '@/hooks/useCart';
 
-// Define possible order statuses (remains the same)
-export type OrderStatus = 'Pending' | 'In Production' | 'Completed' | 'Cancelled';
+// Define possible order statuses including payment states
+export type OrderStatus = 'Pending' | 'Paid' | 'Failed' | 'In Production' | 'Completed' | 'Cancelled';
 
 // Interface for a single item within an order, mapping from PrismaOrderItem
 export interface OrderItem {
@@ -24,7 +24,7 @@ export interface UserOrder {
   date: string; // ISO date string when the order was placed (from createdAt)
   items: OrderItem[]; // Now an array of OrderItem interfaces
   totalPrice: number;
-  status: OrderStatus;
+  status: OrderStatus; // Updated type
   // Include customImageUrl and notes if directly on the order (might be redundant now)
   customImageUrl?: string | null;
   notes?: string | null;
@@ -61,10 +61,10 @@ function mapPrismaOrderToUserOrder(prismaOrder: PrismaOrderWithItems): UserOrder
         date: prismaOrder.createdAt.toISOString(),
         items: items,
         totalPrice: prismaOrder.totalPrice,
-        status: prismaOrder.status as OrderStatus,
+        status: prismaOrder.status as OrderStatus, // Cast to updated type
         // Potentially redundant fields:
-        customImageUrl: prismaOrder.customImageUrl ?? firstCustomItem?.imageUrl,
-        notes: prismaOrder.notes ?? firstCustomItem?.notes,
+        customImageUrl: prismaOrder.customImageUrl ?? firstCustomItem?.imageUrl ?? undefined, // Ensure undefined if null
+        notes: prismaOrder.notes ?? firstCustomItem?.notes ?? undefined, // Ensure undefined if null
     };
 }
 
@@ -146,6 +146,7 @@ export async function getAllCustomOrders(): Promise<UserOrder[]> {
 /**
  * Adds a new order by calling the POST /api/orders endpoint.
  * The API route now uses Prisma and handles creating OrderItems.
+ * The initial status will be 'Pending'.
  * @param userId - The numeric ID of the user placing the order.
  * @param customerName - The name of the customer placing the order.
  * @param cartItems - The items in the cart at the time of checkout.
@@ -175,7 +176,7 @@ export async function addOrder(userId: number, customerName: string, cartItems: 
               customerName,
               totalPrice: orderTotalPrice,
               items: itemsData, // Send array of item data
-              // Status defaults to 'Pending' in Prisma schema
+              // Status defaults to 'Pending' in Prisma schema / API route
           }),
       });
 
@@ -208,6 +209,11 @@ export async function addOrder(userId: number, customerName: string, cartItems: 
  */
 export async function updateOrderStatus(orderId: number, newStatus: OrderStatus): Promise<UserOrder> {
     console.log(`Updating status for order ${orderId} to ${newStatus} via API (using Prisma backend)...`);
+     const validStatuses: OrderStatus[] = ['Pending', 'Paid', 'Failed', 'In Production', 'Completed', 'Cancelled'];
+    if (!validStatuses.includes(newStatus)) {
+        throw new Error(`Invalid status provided: ${newStatus}`);
+    }
+
     try {
         const response = await fetch(`/api/orders/${orderId}/status`, {
             method: 'PATCH',

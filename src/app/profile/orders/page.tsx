@@ -1,3 +1,4 @@
+// src/app/profile/orders/page.tsx
 'use client';
 
 import type React from 'react';
@@ -5,46 +6,62 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQueryClient
 import { format } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge'; // Import Badge
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 // Updated import to use new structure
 import { getUserOrders, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
-import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw } from 'lucide-react';
-import { cn } from '@/lib/utils'; // Import cn
+import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw, CreditCard, XCircle } from 'lucide-react'; // Added new icons
+import { cn } from '@/lib/utils';
 
-// Status Badge Component (Reused)
+// Status Badge Component (Reused & Updated)
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
     let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
     let icon = <Info className="h-3 w-3 mr-1" />;
+    let textColor = "";
 
     switch (status) {
         case 'Pending':
             variant = "outline";
             icon = <RefreshCcw className="h-3 w-3 mr-1 animate-spin animation-duration-2000" />;
             break;
-        case 'In Production':
+        case 'Paid':
             variant = "default";
-             icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
+            icon = <CreditCard className="h-3 w-3 mr-1" />;
+            textColor = "text-primary-foreground";
+            break;
+        case 'In Production':
+            variant = "secondary";
+            icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
             break;
         case 'Completed':
-            variant = "secondary"; // Using theme accent color (teal)
-             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />;
+            variant = "default"; // Changed to use accent color via class
+            icon = <CheckCircle className="h-3 w-3 mr-1" />;
+            textColor = "text-accent-foreground";
             break;
-         case 'Cancelled':
+        case 'Cancelled':
+            variant = "destructive";
+            icon = <XCircle className="h-3 w-3 mr-1" />;
+            break;
+        case 'Failed':
             variant = "destructive";
             icon = <AlertTriangle className="h-3 w-3 mr-1" />;
             break;
     }
 
+    const badgeClass = status === 'Completed'
+        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+        : "";
+
+
     return (
-        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize")}>
+        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize", badgeClass, textColor)}>
             {icon}
             {status}
         </Badge>
@@ -95,6 +112,7 @@ function OrdersPageContent() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient(); // Get query client
 
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -109,14 +127,14 @@ function OrdersPageContent() {
 
   // Fetch orders using useQuery, enabled only when user is loaded and exists with a numeric ID
   const isUserValid = !!user && typeof user.id === 'number';
-  const { data: orders, isLoading: isOrdersLoading, error, isError } = useQuery<UserOrder[], Error>({
+  const { data: orders, isLoading: isOrdersLoading, error, isError, refetch } = useQuery<UserOrder[], Error>({
     queryKey: ['userOrders', user?.id], // Use numeric user ID in query key
     queryFn: () => {
       if (!user || typeof user.id !== 'number') throw new Error("User not authenticated or invalid user ID");
       return getUserOrders(user.id); // Fetch orders for the logged-in user via API using numeric ID
     },
     enabled: isUserValid && !isAuthLoading, // Only run query if user is valid and loaded
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 60 * 2, // Cache for 2 minutes
   });
 
 
@@ -156,7 +174,8 @@ function OrdersPageContent() {
             <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
             <p className="text-lg font-semibold mb-2">Failed to load your orders.</p>
             <p className="text-muted-foreground">({error.message})</p>
-             <Button variant="link" onClick={() => queryClient.invalidateQueries({ queryKey: ['userOrders', user?.id] })} className="mt-4">Try Again</Button>
+             {/* Use refetch from useQuery */}
+             <Button variant="link" onClick={() => refetch()} className="mt-4">Try Again</Button>
         </div>
      );
    }

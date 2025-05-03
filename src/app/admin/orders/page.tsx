@@ -1,3 +1,4 @@
+// src/app/admin/orders/page.tsx
 'use client';
 
 import type React from 'react';
@@ -14,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 // Import API service functions and types (now aligned with new Prisma schema)
 import { getAllCustomOrders, updateOrderStatus, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
-import { Loader2, Package, Image as ImageIcon, Info, AlertTriangle, CheckCircle, RefreshCcw } from 'lucide-react';
+import { Loader2, Package, Image as ImageIcon, Info, AlertTriangle, CheckCircle, RefreshCcw, CreditCard, XCircle } from 'lucide-react'; // Added new icons
 import { cn } from '@/lib/utils'; // Import cn
 
 // Helper to get the first custom item's details from the parsed items array
@@ -22,32 +23,48 @@ const getFirstCustomItem = (items: OrderItem[]): OrderItem | undefined => {
   return items.find(item => item.isCustom);
 };
 
-// Status Badge Component (Reused)
+// Status Badge Component (Updated for Paid/Failed)
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
     let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
     let icon = <Info className="h-3 w-3 mr-1" />;
+    let textColor = ""; // To override default badge text color if needed
 
     switch (status) {
         case 'Pending':
             variant = "outline";
             icon = <RefreshCcw className="h-3 w-3 mr-1 animate-spin animation-duration-2000" />;
             break;
+        case 'Paid': // New status
+            variant = "default"; // Use primary theme color (blue)
+            icon = <CreditCard className="h-3 w-3 mr-1" />;
+            textColor = "text-primary-foreground"; // Ensure contrast if bg is dark
+            break;
         case 'In Production':
-            variant = "default";
+            variant = "secondary"; // Keep secondary for in production
              icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
             break;
         case 'Completed':
-             variant = "secondary"; // Using theme accent color (teal)
-             icon = <CheckCircle className="h-3 w-3 mr-1 text-green-600" />;
-            break;
+             variant = "default"; // Use accent theme color (teal)
+             icon = <CheckCircle className="h-3 w-3 mr-1" />;
+             textColor = "text-accent-foreground"; // Ensure contrast if bg is dark
+             break;
          case 'Cancelled':
             variant = "destructive";
-            icon = <AlertTriangle className="h-3 w-3 mr-1" />;
+            icon = <XCircle className="h-3 w-3 mr-1" />; // Changed icon
             break;
+         case 'Failed': // New status
+             variant = "destructive";
+             icon = <AlertTriangle className="h-3 w-3 mr-1" />;
+             break;
     }
 
+    // Special case for 'Completed' to use accent color directly for background
+    const badgeClass = status === 'Completed'
+        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+        : "";
+
     return (
-        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize")}>
+        <Badge variant={variant} className={cn("flex items-center text-xs whitespace-nowrap capitalize", badgeClass, textColor)}>
             {icon}
             {status}
         </Badge>
@@ -123,6 +140,10 @@ function AdminOrdersPageContent() {
         </div>
      );
   }
+
+  // Define the order of statuses for the dropdown
+  const statusOptions: OrderStatus[] = ['Pending', 'Paid', 'Failed', 'In Production', 'Completed', 'Cancelled'];
+
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -212,7 +233,7 @@ function AdminOrdersPageContent() {
                                       <SelectValue placeholder="Change Status" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                      {(['Pending', 'In Production', 'Completed', 'Cancelled'] as OrderStatus[]).map(statusOption => (
+                                      {statusOptions.map(statusOption => ( // Use defined status options
                                           <SelectItem key={statusOption} value={statusOption} disabled={order.status === statusOption}>
                                               {isUpdating && mutation.variables?.newStatus === statusOption ? (
                                                 <Loader2 className="h-4 w-4 mr-2 animate-spin inline-block" />

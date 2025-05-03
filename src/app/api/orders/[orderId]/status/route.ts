@@ -1,7 +1,7 @@
 // src/app/api/orders/[orderId]/status/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma'; // Import Prisma client
-import type { OrderStatus, UserOrder } from '@/services/order-service';
+import type { OrderStatus, UserOrder } from '@/services/order-service'; // Ensure OrderStatus includes new statuses
 import { Prisma } from '@prisma/client';
 import { useMock } from '@/lib/env'; // Import useMock flag
 import { updateMockOrderStatus, mockOrders } from '@/lib/mockOrders'; // Import mock update function
@@ -14,12 +14,15 @@ interface PatchStatusRequestBody {
   status: OrderStatus;
 }
 
+// Valid Order Statuses
+const validStatuses: OrderStatus[] = ['Pending', 'Paid', 'Failed', 'In Production', 'Completed', 'Cancelled'];
+
 // PATCH /api/orders/:orderId/status - Updates the status of a specific order
 export async function PATCH(request: Request, context: { params: Params }) {
   const { orderId } = context.params;
   const numericOrderId = parseInt(orderId, 10);
 
-  // Validate if the ID is a number (remains the same)
+  // Validate if the ID is a number
   if (isNaN(numericOrderId)) {
       return NextResponse.json({ message: 'Invalid order ID format' }, { status: 400 });
   }
@@ -28,9 +31,9 @@ export async function PATCH(request: Request, context: { params: Params }) {
     const body = await request.json() as PatchStatusRequestBody;
     const { status } = body;
 
-    // Validate status value (remains the same)
-    if (!status || !['Pending', 'In Production', 'Completed', 'Cancelled'].includes(status)) {
-      return NextResponse.json({ message: 'Invalid status provided' }, { status: 400 });
+    // Validate status value against the allowed list
+    if (!status || !validStatuses.includes(status)) {
+      return NextResponse.json({ message: `Invalid status provided. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
     }
 
     if (useMock) {

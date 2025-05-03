@@ -1,20 +1,20 @@
+// src/app/checkout/page.tsx
 'use client';
 
 import type React from 'react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { useCart } from '@/hooks/useCart'; // Import useCart
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
-import { addOrder } from '@/services/order-service'; // Import addOrder service
+import { useCart } from '@/hooks/useCart';
+import { useAuth } from '@/hooks/useAuth';
+import { addOrder } from '@/services/order-service'; // To create order before payment
 import { Loader2, CreditCard, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@/lib/utils'; // Import cn if not already
-
+import { cn } from '@/lib/utils';
 
 function CheckoutPageContent() {
   const router = useRouter();
@@ -34,19 +34,18 @@ function CheckoutPageContent() {
       }
   }, [user, isAuthLoading, router, toast]);
 
-
   const calculateTaxes = (subtotal: number) => {
+    // Example tax calculation
     return subtotal * 0.08;
   };
 
   const subtotal = totalPrice;
   const taxes = calculateTaxes(subtotal);
-  const total = subtotal + taxes;
+  const finalTotal = subtotal + taxes;
 
-  const handleSimulatePayment = async () => {
-    // Ensure user object and user.id exist and are numbers
+  const handlePlaceOrderAndPay = async () => {
     if (!user || typeof user.id !== 'number') {
-        toast({ title: "Error", description: "User information is missing or invalid. Cannot place order.", variant: "destructive" });
+        toast({ title: "Error", description: "User information is missing or invalid.", variant: "destructive" });
         return;
     }
      if (cartItems.length === 0) {
@@ -55,36 +54,72 @@ function CheckoutPageContent() {
      }
 
     setIsProcessing(true);
+    let createdOrderId: number | null = null;
 
     try {
-        // Call addOrder with numeric userId
-        await addOrder(user.id, user.name, cartItems, total);
+        // Step 1: Create the order in 'Pending' state
+        console.log("Creating order in database...");
+        const createdOrder = await addOrder(user.id, user.name || 'Customer', cartItems, finalTotal);
+        createdOrderId = createdOrder.id;
+        console.log(`Order ${createdOrderId} created with status ${createdOrder.status}`);
 
-        toast({
-          title: 'Payment Successful!',
-          description: 'Your order has been placed.',
+        // Step 2: Call the create-session API with items and the new orderId
+        console.log(`Creating payment session for order ${createdOrderId}...`);
+        const response = await fetch('/api/payment/create-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: cartItems, orderId: createdOrderId }),
         });
-        clearCart();
-        router.push('/order-confirmation');
+
+        const sessionData = await response.json();
+
+        if (!response.ok) {
+            // If session creation fails, maybe mark order as failed or allow retry?
+            await prisma.order.update({ where: { id: createdOrderId }, data: { status: 'Failed' } });
+            throw new Error(sessionData.message || 'Failed to create payment session.');
+        }
+
+        if (!sessionData.checkoutUrl) {
+             await prisma.order.update({ where: { id: createdOrderId }, data: { status: 'Failed' } });
+             throw new Error('Checkout URL not received from API.');
+        }
+
+        // Step 3: Redirect to Stripe or Mock Success URL
+        console.log(`Redirecting to: ${sessionData.checkoutUrl}`);
+        clearCart(); // Clear cart after successful session creation
+        router.push(sessionData.checkoutUrl);
+        // No toast here, success/failure is handled on the payment-success page or by Stripe
 
     } catch (error) {
-        console.error("Failed to add order:", error);
+        console.error("Checkout process failed:", error);
         toast({
-          title: 'Order Failed',
-          description: (error as Error).message || 'There was an issue placing your order. Please try again.',
+          title: 'Checkout Failed',
+          description: (error as Error).message || 'There was an issue during checkout. Please try again.',
           variant: 'destructive',
         });
+         // If order was created but payment session failed, update order status
+         if (createdOrderId) {
+             try {
+                await prisma.order.update({ where: { id: createdOrderId }, data: { status: 'Failed' } });
+                console.log(`Order ${createdOrderId} marked as Failed due to payment session error.`);
+             } catch (updateError) {
+                 console.error(`Failed to mark order ${createdOrderId} as Failed:`, updateError);
+             }
+         }
     } finally {
-        setIsProcessing(false);
+        // Only stop processing if there was an error *before* redirect
+        // If redirect happens, the page unmounts anyway.
+        if (router.asPath === '/checkout') { // Check if still on checkout page
+           setIsProcessing(false);
+        }
     }
-
   };
 
-  if (isAuthLoading || isProcessing) {
+  if (isAuthLoading) {
       return (
           <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[calc(100vh-10rem)]">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <span className="ml-4 text-muted-foreground">{isAuthLoading ? 'Verifying user...' : 'Processing order...'}</span>
+              <span className="ml-4 text-muted-foreground">Verifying user...</span>
           </div>
       );
   }
@@ -103,7 +138,7 @@ function CheckoutPageContent() {
       <Card className="w-full max-w-3xl shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Checkout</CardTitle>
-          <CardDescription>Review your order and complete the payment.</CardDescription>
+          <CardDescription>Review your order and proceed to payment.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
@@ -166,7 +201,7 @@ function CheckoutPageContent() {
                 <Separator className="my-2" />
                 <div className="flex justify-between font-bold text-lg">
                   <p>Total</p>
-                  <p>${total.toFixed(2)}</p>
+                  <p>${finalTotal.toFixed(2)}</p>
                 </div>
               </div>
             </>
@@ -175,19 +210,19 @@ function CheckoutPageContent() {
         {cartItems.length > 0 && (
           <CardFooter className="pt-6">
             <Button
-              onClick={handleSimulatePayment}
+              onClick={handlePlaceOrderAndPay}
               className="w-full bg-accent hover:bg-accent/90"
               disabled={isProcessing || !user || cartItems.length === 0}
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Placing Order...
+                  Processing...
                 </>
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                   Place Order (${total.toFixed(2)})
+                   Proceed to Payment (${finalTotal.toFixed(2)})
                 </>
               )}
             </Button>
@@ -199,5 +234,7 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
+    // Need Prisma instance here if updating order status on failure within this component
+    // However, better to handle this in the API route if possible.
     return <CheckoutPageContent />;
 }

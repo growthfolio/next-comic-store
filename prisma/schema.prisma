@@ -1,20 +1,18 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
+datasource db {
+  provider = "sqlite"
+  url      = "file:../data/database.sqlite" // Path relative to schema file
+}
 
 generator client {
   provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "sqlite"
-  url      = "file:../data/database.sqlite" // Path to SQLite file
 }
 
 model User {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
-  password  String
+  password  String   // Store hashed passwords in production
   isAdmin   Boolean  @default(false)
   orders    Order[]
   createdAt DateTime @default(now())
@@ -27,54 +25,46 @@ model Product {
   description String
   price       Float
   imageUrl    String
-  type        String   // "sample"
+  type        String   // e.g., "sample", "custom_base"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  // OrderItem relation: A product can be part of many order items
-  orderItems OrderItem[]
+  orderItems  OrderItem[] // Relation to OrderItem
 }
 
 model Order {
-  id             Int         @id @default(autoincrement())
-  userId         Int
-  user           User        @relation(fields: [userId], references: [id])
-  customerName   String?     // Store customer name at time of order
-  totalPrice     Float
-  status         String      @default("Pending") // Pending, In Production, Completed, Cancelled
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  // Store items as a separate related model instead of JSON string
-  items          OrderItem[]
-
-  // Storing primary custom details directly on Order might be redundant if using OrderItem
-  // Consider removing these if all details are in OrderItem
-  customImageUrl String?
-  notes          String?
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id])
+  customerName    String?  // Store customer name at time of order
+  totalPrice      Float
+  status          String   @default("Pending") // e.g., Pending, Paid, In Production, Completed, Cancelled, Failed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  items           OrderItem[] // Relation to OrderItem
+  // Removed direct customImageUrl and notes from Order - now in OrderItem
+  customImageUrl String? // Can be removed if always retrieved via items
+  notes          String? // Can be removed if always retrieved via items
 }
 
-
-// New Model: OrderItem
-// Represents a single line item within an order.
-// Can link to an existing Product or represent a custom item.
+// New model to represent items within an order
 model OrderItem {
-  id        Int      @id @default(autoincrement())
-  orderId   Int
-  order     Order    @relation(fields: [orderId], references: [id])
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id])
+  productId   Int?     // Link to a standard Product (optional)
+  product     Product? @relation(fields: [productId], references: [id])
 
-  // Link to a Product if it's a standard item
-  productId Int?     // Nullable, because custom items won't have a product ID
-  product   Product? @relation(fields: [productId], references: [id])
+  // Details stored at the time of order
+  title       String   // Title of the item (can be Product title or custom title)
+  price       Float    // Price per item at time of order
+  quantity    Int
+  imageUrl    String?  // Image URL (Product image or custom uploaded image)
+  isCustom    Boolean  @default(false) // Flag for custom items
+  notes       String?  // Notes specific to this custom item
 
-  // Store details specific to this item in the order
-  title     String   // Title at the time of order (could be product title or custom title)
-  price     Float    // Price per unit at the time of order
-  quantity  Int
-  imageUrl  String?  // Image URL (from product or custom upload)
-  isCustom  Boolean  @default(false)
-  notes     String?  // Notes specific to this custom item
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Optional: Add unique constraint if needed, e.g., unique(orderId, productId) for non-custom items
-  // @@unique([orderId, productId])
+  @@index([orderId])
+  @@index([productId])
 }
