@@ -81,6 +81,7 @@ async function main() {
   console.log(`Start seeding ...`);
 
   // Seed Users
+  console.log("Seeding users...");
   for (const u of userData) {
     const user = await prisma.user.upsert({
       where: { email: u.email },
@@ -90,20 +91,34 @@ async function main() {
     console.log(`Created or found user with id: ${user.id}`);
   }
 
-  // Seed Products
+  // Seed Products (Samples)
+  console.log("Seeding sample products...");
+  // Clear existing products first to avoid duplicates if IDs change
+  await prisma.product.deleteMany({});
+  const createdProducts: Record<string, number> = {}; // To store title -> id mapping
   for (const p of productData) {
     const product = await prisma.product.create({
       data: p,
     });
-    console.log(`Created product with id: ${product.id}`);
+    createdProducts[p.title] = product.id; // Store ID by title
+    console.log(`Created product "${p.title}" with id: ${product.id}`);
   }
 
   // Seed an example custom order for the test user
+  console.log("Seeding example order for test user...");
   const testUser = await prisma.user.findUnique({ where: { email: 'test@example.com' } });
   if (testUser) {
-    const customOrderItems = [
+     // Clear existing orders for the test user to avoid duplicates on re-seed
+     await prisma.order.deleteMany({ where: { userId: testUser.id } });
+
+    const cosmicCrusadersProductId = createdProducts['Cosmic Crusaders #1'];
+    if (!cosmicCrusadersProductId) {
+        console.warn("Could not find product ID for 'Cosmic Crusaders #1'. Skipping adding it to the seed order.");
+    }
+
+    const orderItems = [
         {
-            productId: `custom-${Date.now()}`, // Simulate a custom ID
+            productId: `custom-${Date.now()}`, // Simulate a custom ID (string)
             title: 'My Custom Superhero',
             price: 25.00,
             quantity: 1,
@@ -111,31 +126,31 @@ async function main() {
             isCustom: true,
             notes: 'Make the hero fly over a city skyline.',
         },
-         {
-            // Example of adding a sample product to the same order
-            productId: '1', // Link to existing product 'Cosmic Crusaders #1'
+        // Only add if the product ID was found
+        ...(cosmicCrusadersProductId ? [{
+            productId: cosmicCrusadersProductId, // Link to existing product ID (number)
             title: 'Cosmic Crusaders #1',
             price: 4.99,
             quantity: 2,
             imageUrl: `https://picsum.photos/seed/cosmic1/400/600`,
             isCustom: false,
             notes: '',
-        }
+        }] : [])
     ];
-    const totalPrice = customOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalPrice = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const firstCustomItem = orderItems.find(item => item.isCustom);
 
     const order = await prisma.order.create({
       data: {
         userId: testUser.id,
         customerName: testUser.name,
-        itemsJson: JSON.stringify(customOrderItems), // Store items as JSON
+        itemsJson: JSON.stringify(orderItems), // Store items as JSON string
         totalPrice: totalPrice,
-        status: 'In Production',
-        // Link the sample product item to the Product table if possible
-        // This requires more complex logic to connect based on itemsJson, skipped for simplicity in seed
-        // productId: 1, // Example if the *entire* order was just for one product
-        customImageUrl: customOrderItems.find(item => item.isCustom)?.imageUrl, // Save main custom image URL if exists
-        notes: customOrderItems.find(item => item.isCustom)?.notes, // Save main custom notes if exists
+        status: 'In Production', // Example status
+        // productId: cosmicCrusadersProductId, // Link to one product if the entire order IS that product (optional, maybe remove)
+        // Store primary custom details directly on order for easier querying if needed
+        customImageUrl: firstCustomItem?.imageUrl,
+        notes: firstCustomItem?.notes,
       },
     });
     console.log(`Created custom order with id: ${order.id} for user ${testUser.email}`);
@@ -155,3 +170,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
