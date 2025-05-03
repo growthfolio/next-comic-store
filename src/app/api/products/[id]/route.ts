@@ -1,8 +1,9 @@
+
 // src/app/api/products/[id]/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { useMock } from '@/lib/env'; // Import useMock flag
-import { mockProducts } from '@/app/api/products/route'; // Import mock products from the list endpoint
+import { mockProducts } from '@/lib/mockProducts'; // Import mock products from the new file
 
 type Params = {
   id: string;
