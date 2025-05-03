@@ -20,21 +20,26 @@ export async function GET() {
       let statusCode = 500;
 
       if (error instanceof Prisma.PrismaClientInitializationError) {
-        errorMessage = 'Database connection error. Please check the database server and connection settings.';
+        // Provide more specific guidance for initialization errors
+        errorMessage = `Database connection error: ${error.message}. Please ensure the database file exists (path in schema.prisma), migrations are applied ('prisma migrate dev'), and the server has permissions.`;
         statusCode = 503; // Service Unavailable
         console.error("Prisma Initialization Error Details:", error.message);
+        // Log potential underlying cause if available (might relate to missing engine file or permissions)
+        if (error.errorCode) {
+            console.error(`Prisma Error Code: ${error.errorCode}`);
+        }
       } else if (error instanceof Prisma.PrismaClientKnownRequestError) {
         // Handle known Prisma request errors (e.g., schema issues)
         errorMessage = `Database query error: ${error.code}. Please check the query and schema.`;
         console.error(`Prisma Known Request Error (${error.code}):`, error.message);
       } else if (error instanceof Error) {
         errorMessage = error.message;
-        // Log detailed error if available, e.g., engine loading errors
+        // Specific checks for common binary/library issues (might occur in some environments)
         if (error.message.includes('libssl.so')) {
            errorMessage = "Internal Server Error - Missing required system library (OpenSSL).";
            console.error("Missing OpenSSL library error:", error.message);
         } else if (error.message.includes('cannot open shared object file')) {
-           errorMessage = `Internal Server Error - Failed to load database engine. Ensure Prisma binaries are correctly generated and accessible. Details: ${error.message}`;
+           errorMessage = `Internal Server Error - Failed to load database engine. Ensure Prisma binaries are correctly generated ('prisma generate') and accessible. Details: ${error.message}`;
            console.error("Database engine loading error:", error.message);
         }
       }
