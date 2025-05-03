@@ -38,7 +38,10 @@ function GalleryPageContent() {
        const uniqueCategories = ['all', ...new Set(comics.map(comic => comic.type))]; // Use 'type' from Prisma model if it represents category
        setCategories(uniqueCategories);
 
-       let tempComics = comics;
+       let tempComics = [...comics]; // Create a mutable copy
+
+       // Apply sorting (e.g., by title)
+       tempComics.sort((a, b) => a.title.localeCompare(b.title));
 
        if (selectedCategory !== 'all') {
          tempComics = tempComics.filter(comic => comic.type === selectedCategory);

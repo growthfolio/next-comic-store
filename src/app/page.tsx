@@ -98,7 +98,7 @@ function HomePageContent() {
                     className="rounded-t-lg"
                     data-ai-hint="comic book cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                    priority={index < 2}
+                    priority={index < 2} // Prioritize loading the first couple of images
                   />
                 </div>
                 <CardHeader className="flex-grow">

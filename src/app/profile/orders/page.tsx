@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+// Updated import to use new structure
 import { getUserOrders, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
 import { Loader2, ShoppingBag, Package, AlertTriangle, CheckCircle, Info, RefreshCcw } from 'lucide-react';
 import { cn } from '@/lib/utils'; // Import cn
@@ -51,7 +52,7 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
 };
 
 
-// Order Item Display Component (Improved)
+// Order Item Display Component (Displays a single OrderItem)
 function OrderItemDisplay({ item }: { item: OrderItem }) {
   return (
     <div className="flex items-center gap-4 py-2 border-b last:border-b-0">
@@ -75,7 +76,8 @@ function OrderItemDisplay({ item }: { item: OrderItem }) {
       <div className="flex-grow min-w-0">
         <p className="font-medium truncate">{item.title}</p>
         <p className="text-xs text-muted-foreground">
-          ID: <span className="font-mono text-[11px]">{typeof item.productId === 'number' ? item.productId : `${item.productId.substring(0,10)}...`}</span>
+          {/* Display Product ID if standard, otherwise indicate custom */}
+          {item.productId ? `Product ID: ${item.productId}` : `Item ID: ${item.id}`}
         </p>
          <p className="text-xs text-muted-foreground">Type: {item.isCustom ? 'Customized' : 'Standard'}</p>
         {item.isCustom && item.notes && (
@@ -154,7 +156,7 @@ function OrdersPageContent() {
             <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
             <p className="text-lg font-semibold mb-2">Failed to load your orders.</p>
             <p className="text-muted-foreground">({error.message})</p>
-             <Button variant="link" onClick={() => router.refresh()} className="mt-4">Try Again</Button>
+             <Button variant="link" onClick={() => queryClient.invalidateQueries({ queryKey: ['userOrders', user?.id] })} className="mt-4">Try Again</Button>
         </div>
      );
    }
@@ -186,9 +188,8 @@ function OrdersPageContent() {
               </CardHeader>
               <CardContent className="p-4 space-y-2">
                  <h4 className="text-md font-semibold mb-2">Items ({order.items.length}):</h4>
-                 {order.items.map((item, index) => (
-                     // Use a more robust key combining order and item identifiers
-                    <OrderItemDisplay key={`${order.id}-${item.productId}-${index}`} item={item} />
+                 {order.items.map((item) => (
+                    <OrderItemDisplay key={item.id} item={item} />
                  ))}
               </CardContent>
               {/* <CardFooter className="p-4 bg-muted/50 border-t flex justify-end">

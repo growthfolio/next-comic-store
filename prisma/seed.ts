@@ -1,3 +1,4 @@
+
 import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -94,7 +95,9 @@ async function main() {
   // Seed Products (Samples)
   console.log("Seeding sample products...");
   // Clear existing products first to avoid duplicates if IDs change
-  await prisma.product.deleteMany({});
+  await prisma.orderItem.deleteMany({}); // Delete order items first due to relation
+  await prisma.order.deleteMany({}); // Then delete orders
+  await prisma.product.deleteMany({}); // Then delete products
   const createdProducts: Record<string, number> = {}; // To store title -> id mapping
   for (const p of productData) {
     const product = await prisma.product.create({
@@ -104,56 +107,65 @@ async function main() {
     console.log(`Created product "${p.title}" with id: ${product.id}`);
   }
 
-  // Seed an example custom order for the test user
+  // Seed an example order for the test user
   console.log("Seeding example order for test user...");
   const testUser = await prisma.user.findUnique({ where: { email: 'test@example.com' } });
   if (testUser) {
-     // Clear existing orders for the test user to avoid duplicates on re-seed
-     await prisma.order.deleteMany({ where: { userId: testUser.id } });
+     // Orders already cleared above
 
     const cosmicCrusadersProductId = createdProducts['Cosmic Crusaders #1'];
     if (!cosmicCrusadersProductId) {
         console.warn("Could not find product ID for 'Cosmic Crusaders #1'. Skipping adding it to the seed order.");
     }
 
-    const orderItems = [
+    // Define item data for OrderItem creation
+    const orderItemsInput: Prisma.OrderItemCreateWithoutOrderInput[] = [
         {
-            productId: `custom-${Date.now()}`, // Simulate a custom ID (string)
+            // No productId for custom item
             title: 'My Custom Superhero',
             price: 25.00,
             quantity: 1,
-            imageUrl: 'https://picsum.photos/seed/custom1/600/900', // Example custom image URL
+            imageUrl: 'https://picsum.photos/seed/custom1/600/900',
             isCustom: true,
             notes: 'Make the hero fly over a city skyline.',
         },
         // Only add if the product ID was found
         ...(cosmicCrusadersProductId ? [{
-            productId: cosmicCrusadersProductId, // Link to existing product ID (number)
-            title: 'Cosmic Crusaders #1',
-            price: 4.99,
+            productId: cosmicCrusadersProductId, // Link to existing product
+            product: { connect: { id: cosmicCrusadersProductId } },
+            title: 'Cosmic Crusaders #1', // Store title at time of order
+            price: 4.99, // Store price at time of order
             quantity: 2,
-            imageUrl: `https://picsum.photos/seed/cosmic1/400/600`,
+            imageUrl: `https://picsum.photos/seed/cosmic1/400/600`, // Store image URL at time of order
             isCustom: false,
             notes: '',
         }] : [])
     ];
-    const totalPrice = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const firstCustomItem = orderItems.find(item => item.isCustom);
 
+    const totalPrice = orderItemsInput.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const firstCustomItem = orderItemsInput.find(item => item.isCustom);
+
+    // Create the Order and connect/create OrderItems within a transaction (implicitly via nested create)
     const order = await prisma.order.create({
       data: {
         userId: testUser.id,
+        user: { connect: { id: testUser.id } }, // Connect user
         customerName: testUser.name,
-        itemsJson: JSON.stringify(orderItems), // Store items as JSON string
         totalPrice: totalPrice,
         status: 'In Production', // Example status
-        // productId: cosmicCrusadersProductId, // Link to one product if the entire order IS that product (optional, maybe remove)
-        // Store primary custom details directly on order for easier querying if needed
+        // Create OrderItems and link them to this order
+        items: {
+            create: orderItemsInput,
+        },
+        // Optional: Store primary custom details directly on order for easier querying if needed (can be redundant)
         customImageUrl: firstCustomItem?.imageUrl,
         notes: firstCustomItem?.notes,
       },
+       include: { // Include items to log them
+           items: true,
+       }
     });
-    console.log(`Created custom order with id: ${order.id} for user ${testUser.email}`);
+    console.log(`Created order with id: ${order.id} for user ${testUser.email} with ${order.items.length} items.`);
   } else {
     console.warn('Could not find test user test@example.com to create a seed order.');
   }
@@ -170,4 +182,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

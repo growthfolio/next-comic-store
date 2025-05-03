@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-// Import API service functions and types (now aligned with Prisma)
+// Import API service functions and types (now aligned with new Prisma schema)
 import { getAllCustomOrders, updateOrderStatus, type UserOrder, type OrderItem, type OrderStatus } from '@/services/order-service';
 import { Loader2, Package, Image as ImageIcon, Info, AlertTriangle, CheckCircle, RefreshCcw } from 'lucide-react';
 import { cn } from '@/lib/utils'; // Import cn
@@ -61,14 +61,14 @@ function AdminOrdersPageContent() {
   const queryClient = useQueryClient();
   const [updatingStatusMap, setUpdatingStatusMap] = useState<Record<number, boolean>>({}); // Track loading state per order using numeric ID
 
-  // Fetch all custom orders using useQuery and the API service (which now uses Prisma)
+  // Fetch all custom orders using useQuery and the API service
   const { data: orders, isLoading, error, isError } = useQuery<UserOrder[], Error>({
     queryKey: ['allCustomOrders'],
     queryFn: getAllCustomOrders, // API service function fetches from Prisma via API
     staleTime: 1000 * 60, // Cache for 1 minute
   });
 
-  // Mutation for updating order status using the API service (which now uses Prisma)
+  // Mutation for updating order status using the API service
   const mutation = useMutation({
      mutationFn: ({ orderId, newStatus }: { orderId: number, newStatus: OrderStatus }) =>
         updateOrderStatus(orderId, newStatus), // Use the API service function with numeric ID
@@ -77,7 +77,12 @@ function AdminOrdersPageContent() {
      },
      onSuccess: (updatedOrder, { orderId, newStatus }) => {
        toast({ title: 'Status Updated', description: `Order ${orderId} status changed to ${newStatus}.` });
-       queryClient.invalidateQueries({ queryKey: ['allCustomOrders'] });
+       // Update the specific order in the cache directly for faster UI update
+       queryClient.setQueryData(['allCustomOrders'], (oldData: UserOrder[] | undefined) => {
+           return oldData ? oldData.map(order => order.id === orderId ? updatedOrder : order) : [];
+       });
+       // Optionally invalidate if other data might have changed or direct update is complex
+       // queryClient.invalidateQueries({ queryKey: ['allCustomOrders'] });
      },
      onError: (err, { orderId }, context: any) => {
        toast({ title: 'Update Failed', description: (err as Error).message || 'Could not update order status.', variant: 'destructive' });
@@ -125,9 +130,9 @@ function AdminOrdersPageContent() {
 
       {orders && orders.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Orders are already sorted by API/service */}
+          {/* Orders are potentially sorted by API/service, or sort here if needed */}
           {orders.map((order) => {
-                   // Get details of the first custom item from the parsed items array
+                   // Get details of the first custom item from the items array
                    const customItem = getFirstCustomItem(order.items);
                    const isUpdating = updatingStatusMap[order.id];
 
@@ -140,7 +145,6 @@ function AdminOrdersPageContent() {
                                         Order ID: {order.id}
                                     </CardTitle>
                                     <CardDescription className="text-xs mt-1">
-                                        {/* Display user ID or name */}
                                         By: {order.customerName || `User ID: ${order.userId}`} <br />
                                         On: {format(new Date(order.date), 'PPP p')}
                                     </CardDescription>
@@ -176,16 +180,14 @@ function AdminOrdersPageContent() {
                                               {customItem.notes || <em>No notes provided.</em>}
                                           </p>
                                        </div>
-                                       {/* Optionally display other items in the order */}
-                                       {order.items.length > 1 && (
+                                       {/* Display all items in the order */}
+                                       {order.items.length > 0 && (
                                            <div className="mt-3 pt-3 border-t">
-                                               <p className="text-xs font-medium text-muted-foreground mb-1">Other Items:</p>
-                                               <ul className="text-xs list-disc list-inside text-muted-foreground space-y-1">
-                                                   {order.items
-                                                       .filter(item => !item.isCustom)
-                                                       .map((item, idx) => (
-                                                           <li key={idx} className="truncate">
-                                                               {item.quantity}x {item.title} (${item.price.toFixed(2)} each)
+                                               <p className="text-xs font-medium text-muted-foreground mb-1">Order Items ({order.items.length}):</p>
+                                               <ul className="text-xs list-disc list-inside text-muted-foreground space-y-1 max-h-24 overflow-y-auto">
+                                                   {order.items.map((item) => (
+                                                           <li key={item.id} className="truncate" title={`${item.quantity}x ${item.title} (${item.isCustom ? 'Custom' : 'Standard'}) @ $${item.price.toFixed(2)}`}>
+                                                               {item.quantity}x {item.title} ({item.isCustom ? 'Custom' : 'Standard'})
                                                            </li>
                                                        ))}
                                                </ul>
@@ -193,10 +195,10 @@ function AdminOrdersPageContent() {
                                        )}
                                   </>
                               ) : (
-                                  // Fallback if somehow no custom item is found in a custom order
-                                  <div className="flex items-center justify-center h-full text-destructive-foreground bg-destructive/10 p-4 rounded-md">
-                                      <AlertTriangle className="h-5 w-5 mr-2" />
-                                      <p className="text-sm font-medium">Error: Custom item details not parsed correctly.</p>
+                                  // Fallback if somehow no custom item is found in a "custom" order list (shouldn't happen with API filtering)
+                                  <div className="flex items-center justify-center h-full text-muted-foreground bg-muted/10 p-4 rounded-md">
+                                      <Info className="h-5 w-5 mr-2" />
+                                      <p className="text-sm font-medium">Order contains only standard items.</p>
                                   </div>
                               )}
                           </CardContent>

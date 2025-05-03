@@ -3,61 +3,78 @@
 
 generator client {
   provider = "prisma-client-js"
-  // Add "native" to allow Prisma to detect the OS and use a compatible engine
-  // Keep the original target as a fallback.
-  binaryTargets = ["native", "debian-openssl-1.1.x"]
 }
 
 datasource db {
   provider = "sqlite"
-  url      = "file:../data/database.sqlite" // Changed path to point to /data folder
+  url      = "file:../data/database.sqlite" // Path to SQLite file
 }
 
-
-// User Model
 model User {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
-  password  String   // Storing plain text password for now (INSECURE)
+  password  String
   isAdmin   Boolean  @default(false)
-  orders    Order[]  // Relation to Order model
+  orders    Order[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Product Model (for Comic Samples)
 model Product {
   id          Int      @id @default(autoincrement())
   title       String
   description String
   price       Float
   imageUrl    String
-  type        String   // e.g., "sample"
-  orders      Order[] // Relation to Order model (for orders containing this product)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  type        String   // "sample"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // OrderItem relation: A product can be part of many order items
+  orderItems OrderItem[]
 }
 
-// Order Model
 model Order {
-  id             Int       @id @default(autoincrement())
+  id             Int         @id @default(autoincrement())
   userId         Int
-  user           User      @relation(fields: [userId], references: [id])
-  // productId is nullable if the order is purely custom or contains only custom items initially
-  productId      Int?
-  product        Product?  @relation(fields: [productId], references: [id])
-  // Store items as JSON string - more flexible for mixed sample/custom orders
-  itemsJson      String
+  user           User        @relation(fields: [userId], references: [id])
+  customerName   String?     // Store customer name at time of order
   totalPrice     Float
-  // Fields specific to custom orders can still be here for quick access/filtering
+  status         String      @default("Pending") // Pending, In Production, Completed, Cancelled
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Store items as a separate related model instead of JSON string
+  items          OrderItem[]
+
+  // Storing primary custom details directly on Order might be redundant if using OrderItem
+  // Consider removing these if all details are in OrderItem
   customImageUrl String?
   notes          String?
-  status         String    @default("Pending") // e.g., Pending, In Production, Completed, Cancelled
-  customerName   String? // Store customer name at time of order
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+}
 
-  // Add index for faster user order lookups
-  @@index([userId])
+
+// New Model: OrderItem
+// Represents a single line item within an order.
+// Can link to an existing Product or represent a custom item.
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+
+  // Link to a Product if it's a standard item
+  productId Int?     // Nullable, because custom items won't have a product ID
+  product   Product? @relation(fields: [productId], references: [id])
+
+  // Store details specific to this item in the order
+  title     String   // Title at the time of order (could be product title or custom title)
+  price     Float    // Price per unit at the time of order
+  quantity  Int
+  imageUrl  String?  // Image URL (from product or custom upload)
+  isCustom  Boolean  @default(false)
+  notes     String?  // Notes specific to this custom item
+
+  // Optional: Add unique constraint if needed, e.g., unique(orderId, productId) for non-custom items
+  // @@unique([orderId, productId])
 }

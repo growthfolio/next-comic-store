@@ -35,13 +35,14 @@ export async function PATCH(request: Request, context: { params: Params }) {
     const updatedOrder = await prisma.order.update({
       where: { id: numericOrderId },
       data: { status: status },
+      include: { items: true }, // Include items in the response
     });
 
     // Note: If the order doesn't exist, prisma.update throws PrismaClientKnownRequestError P2025
     // which will be caught below.
 
     console.log(`API: Updated status for order ${orderId} to ${status} in DB`);
-    return NextResponse.json(updatedOrder); // Return the updated order
+    return NextResponse.json(updatedOrder); // Return the updated order with items
 
   } catch (error) {
     console.error(`API Error updating status for order ${orderId}:`, error);
@@ -53,7 +54,5 @@ export async function PATCH(request: Request, context: { params: Params }) {
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to update order status';
     return NextResponse.json({ message: errorMessage }, { status: 500 });
-  } finally {
-     // await prisma.$disconnect(); // Consider based on deployment
   }
 }
