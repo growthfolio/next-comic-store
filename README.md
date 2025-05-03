@@ -131,6 +131,15 @@ These routes interact with the SQLite database via Prisma.
 -   It simulates a delay and returns a placeholder image URL from `picsum.photos`.
 -   A real storage solution (like Firebase Storage, Cloudinary, or S3) would be needed for a production environment.
 
+## 🧪 Mock Mode
+
+To simulate API data without requiring a real database, you can enable **Mock Mode**:
+
+1. Open the `.env` file
+2. Add or edit the following line:
+
+
+
 ## 🧪 Prisma Studio
 
 You can use Prisma Studio to visually browse and manage the data in your SQLite database:
