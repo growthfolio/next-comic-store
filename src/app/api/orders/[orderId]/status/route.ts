@@ -1,8 +1,10 @@
 // src/app/api/orders/[orderId]/status/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma'; // Import Prisma client
-import type { OrderStatus } from '@/services/order-service';
+import type { OrderStatus, UserOrder } from '@/services/order-service';
 import { Prisma } from '@prisma/client';
+import { useMock } from '@/lib/env'; // Import useMock flag
+import { updateMockOrderStatus, mockOrders } from '@/lib/mockOrders'; // Import mock update function
 
 type Params = {
   orderId: string;
@@ -17,7 +19,7 @@ export async function PATCH(request: Request, context: { params: Params }) {
   const { orderId } = context.params;
   const numericOrderId = parseInt(orderId, 10);
 
-  // Validate if the ID is a number
+  // Validate if the ID is a number (remains the same)
   if (isNaN(numericOrderId)) {
       return NextResponse.json({ message: 'Invalid order ID format' }, { status: 400 });
   }
@@ -26,32 +28,46 @@ export async function PATCH(request: Request, context: { params: Params }) {
     const body = await request.json() as PatchStatusRequestBody;
     const { status } = body;
 
-    // Validate status value
+    // Validate status value (remains the same)
     if (!status || !['Pending', 'In Production', 'Completed', 'Cancelled'].includes(status)) {
       return NextResponse.json({ message: 'Invalid status provided' }, { status: 400 });
     }
 
-    // Update the order status in the database using Prisma
-    const updatedOrder = await prisma.order.update({
-      where: { id: numericOrderId },
-      data: { status: status },
-      include: { items: true }, // Include items in the response
-    });
+    if (useMock) {
+        // --- Mock Logic ---
+        console.log(`API PATCH Order Status (Mock): Updating order ${numericOrderId} to ${status}`);
+        const updatedMockOrder = updateMockOrderStatus(numericOrderId, status);
 
-    // Note: If the order doesn't exist, prisma.update throws PrismaClientKnownRequestError P2025
-    // which will be caught below.
-
-    console.log(`API: Updated status for order ${orderId} to ${status} in DB`);
-    return NextResponse.json(updatedOrder); // Return the updated order with items
+        if (!updatedMockOrder) {
+            return NextResponse.json({ message: 'Order not found (Mock)' }, { status: 404 });
+        }
+        return NextResponse.json(updatedMockOrder);
+        // --- End Mock Logic ---
+    } else {
+        // --- Prisma Logic ---
+        console.log(`API PATCH Order Status (DB): Updating order ${numericOrderId} to ${status}`);
+        try {
+            const updatedOrder = await prisma.order.update({
+                where: { id: numericOrderId },
+                data: { status: status },
+                include: { items: true }, // Include items in the response
+            });
+            console.log(`API: Updated status for order ${orderId} to ${status} in DB`);
+            return NextResponse.json(updatedOrder); // Return the updated order with items
+        } catch (error) {
+             console.error(`API Error updating status for order ${orderId} (DB):`, error);
+             // Handle specific Prisma error for record not found
+             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+                 return NextResponse.json({ message: 'Order not found' }, { status: 404 });
+             }
+             throw error; // Re-throw other Prisma errors
+        }
+        // --- End Prisma Logic ---
+    }
 
   } catch (error) {
     console.error(`API Error updating status for order ${orderId}:`, error);
-
-    // Handle specific Prisma error for record not found
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return NextResponse.json({ message: 'Order not found' }, { status: 404 });
-    }
-
+    // General error handling (if not caught by Prisma specific handler)
     const errorMessage = error instanceof Error ? error.message : 'Failed to update order status';
     return NextResponse.json({ message: errorMessage }, { status: 500 });
   }

@@ -137,7 +137,18 @@ To simulate API data without requiring a real database, you can enable **Mock Mo
 
 1. Open the `.env` file
 2. Add or edit the following line:
+   ```env
+   USE_MOCK=true
+   ```
+3. Restart the development server (`npm run dev`).
 
+When `USE_MOCK=true`, the API routes (`/api/auth/login`, `/api/orders`, etc.) will use hardcoded mock data from `src/lib/mockUsers.ts` and `src/lib/mockOrders.ts` instead of interacting with the Prisma database.
+
+**Mock User Credentials:**
+- **Admin:** `admin.mock@comichub.com` / `password`
+- **Regular User:** `test.mock@example.com` / `password`
+
+This is useful for frontend development or testing without needing the database running. To switch back to using the real database, set `USE_MOCK=false` or remove the line from `.env`.
 
 
 ## 🧪 Prisma Studio
@@ -155,3 +166,4 @@ This will open a web interface, usually at `http://localhost:5555`.
 *(Placeholder - Add deployment instructions here when applicable)*
 
 Instructions for deploying this Next.js application to platforms like Vercel, Netlify, or others would go here. Considerations for database hosting and environment variables would also be included.
+

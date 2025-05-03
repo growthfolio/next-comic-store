@@ -1,11 +1,13 @@
 // src/app/api/orders/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import type { OrderStatus } from '@/services/order-service'; // Reuse status type
+import type { OrderStatus, UserOrder, OrderItem as ApiOrderItem } from '@/services/order-service'; // Reuse status type
 import type { CartItem } from '@/hooks/useCart'; // For POST request body type
 import { Prisma } from '@prisma/client';
+import { useMock } from '@/lib/env'; // Import useMock flag
+import { mockOrders, addMockOrder } from '@/lib/mockOrders'; // Import mock orders and add function
 
-// Helper type for OrderItem data coming from the request
+// Helper type for OrderItem data coming from the request (remains the same)
 interface OrderItemInput {
     productId?: number; // Optional: Link to Product
     title: string;
@@ -31,31 +33,52 @@ export async function GET(request: Request) {
   }
 
   try {
-    const whereClause: Prisma.OrderWhereInput = {};
-    if (userId !== undefined) {
-      whereClause.userId = userId;
-    }
-    if (fetchOnlyCustom) {
-       // Filter orders that have at least one OrderItem where isCustom is true
-       whereClause.items = {
-           some: {
-               isCustom: true,
-           },
-       };
-    }
+    if (useMock) {
+        // --- Mock Logic ---
+        console.log("API GET Orders: Using mock data");
+        let filteredOrders = [...mockOrders]; // Start with all mock orders
 
-    const orders = await prisma.order.findMany({
-      where: whereClause,
-      include: {
-        items: true, // Include related OrderItems
-        // Optionally include user details if needed, but be mindful of data exposure
-        // user: { select: { id: true, name: true, email: true } }
-      },
-      orderBy: {
-        createdAt: 'desc', // Show newest orders first
-      },
-    });
-    return NextResponse.json(orders);
+        if (userId !== undefined) {
+            filteredOrders = filteredOrders.filter(order => order.userId === userId);
+        }
+        if (fetchOnlyCustom) {
+            // Filter mock orders that have at least one custom item
+            filteredOrders = filteredOrders.filter(order => order.items.some(item => item.isCustom));
+        }
+        // Sort mock orders newest first
+        filteredOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return NextResponse.json(filteredOrders);
+        // --- End Mock Logic ---
+    } else {
+        // --- Prisma Logic ---
+        console.log("API GET Orders: Using Prisma database");
+        const whereClause: Prisma.OrderWhereInput = {};
+        if (userId !== undefined) {
+        whereClause.userId = userId;
+        }
+        if (fetchOnlyCustom) {
+        // Filter orders that have at least one OrderItem where isCustom is true
+        whereClause.items = {
+            some: {
+                isCustom: true,
+            },
+        };
+        }
+
+        const orders = await prisma.order.findMany({
+        where: whereClause,
+        include: {
+            items: true, // Include related OrderItems
+            // Optionally include user details if needed, but be mindful of data exposure
+            // user: { select: { id: true, name: true, email: true } }
+        },
+        orderBy: {
+            createdAt: 'desc', // Show newest orders first
+        },
+        });
+        return NextResponse.json(orders);
+         // --- End Prisma Logic ---
+    }
   } catch (error) {
     console.error('API Error fetching orders:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch orders';
@@ -77,35 +100,23 @@ export async function POST(request: Request) {
     const body = await request.json() as PostOrderRequestBody;
     const { userId, customerName, totalPrice, items } = body;
 
-    // Basic validation
+    // Basic validation (remains the same)
     if (!userId || !items || items.length === 0 || totalPrice === undefined) {
         return NextResponse.json({ message: 'Missing required order data (userId, items, totalPrice)' }, { status: 400 });
     }
-
-     // Validate each item
      for (const item of items) {
          if (!item.title || item.price === undefined || !item.quantity) {
               return NextResponse.json({ message: `Invalid item data provided: ${JSON.stringify(item)}` }, { status: 400 });
          }
      }
 
-    // Use a Prisma transaction to ensure atomicity (all or nothing)
-    const newOrderWithItems = await prisma.$transaction(async (tx) => {
-        // 1. Create the Order
-        const newOrder = await tx.order.create({
-            data: {
-                userId: userId,
-                customerName: customerName,
-                totalPrice: totalPrice,
-                status: 'Pending', // Default status
-                // customImageUrl and notes might be redundant if stored per item
-            },
-        });
-
-        // 2. Create OrderItems linked to the new Order
-        const orderItemsData = items.map(item => ({
-            orderId: newOrder.id,
-            productId: item.productId, // Will be null if undefined
+    if (useMock) {
+        // --- Mock Logic ---
+        console.log("API POST Order: Using mock data");
+        // Map input items to ApiOrderItem format for the mock function
+        const apiOrderItems: ApiOrderItem[] = items.map((item, index) => ({
+            id: Date.now() + index, // Temporary mock ID for the item
+            productId: item.productId,
             title: item.title,
             price: item.price,
             quantity: item.quantity,
@@ -113,28 +124,59 @@ export async function POST(request: Request) {
             isCustom: item.isCustom,
             notes: item.notes,
         }));
+        const newMockOrder = addMockOrder(userId, customerName, apiOrderItems, totalPrice);
+        return NextResponse.json(newMockOrder, { status: 201 });
+        // --- End Mock Logic ---
+    } else {
+        // --- Prisma Logic ---
+        console.log("API POST Order: Using Prisma database");
+        // Use a Prisma transaction to ensure atomicity (all or nothing)
+        const newOrderWithItems = await prisma.$transaction(async (tx) => {
+            // 1. Create the Order
+            const newOrder = await tx.order.create({
+                data: {
+                    userId: userId,
+                    customerName: customerName,
+                    totalPrice: totalPrice,
+                    status: 'Pending', // Default status
+                    // customImageUrl and notes might be redundant if stored per item
+                },
+            });
 
-        await tx.orderItem.createMany({
-            data: orderItemsData,
+            // 2. Create OrderItems linked to the new Order
+            const orderItemsData = items.map(item => ({
+                orderId: newOrder.id,
+                productId: item.productId, // Will be null if undefined
+                title: item.title,
+                price: item.price,
+                quantity: item.quantity,
+                imageUrl: item.imageUrl,
+                isCustom: item.isCustom,
+                notes: item.notes,
+            }));
+
+            await tx.orderItem.createMany({
+                data: orderItemsData,
+            });
+
+            // 3. Fetch the created order with its items to return
+            const createdOrder = await tx.order.findUnique({
+                where: { id: newOrder.id },
+                include: { items: true }, // Include the items we just created
+            });
+
+            if (!createdOrder) {
+                // This should not happen in a successful transaction, but good to check
+                throw new Error("Failed to retrieve created order after transaction.");
+            }
+
+            return createdOrder;
         });
 
-         // 3. Fetch the created order with its items to return
-         const createdOrder = await tx.order.findUnique({
-            where: { id: newOrder.id },
-            include: { items: true }, // Include the items we just created
-         });
-
-         if (!createdOrder) {
-             // This should not happen in a successful transaction, but good to check
-             throw new Error("Failed to retrieve created order after transaction.");
-         }
-
-         return createdOrder;
-    });
-
-
-    console.log('API: Order with items added to DB:', newOrderWithItems);
-    return NextResponse.json(newOrderWithItems, { status: 201 }); // Return the created order with items
+        console.log('API: Order with items added to DB:', newOrderWithItems);
+        return NextResponse.json(newOrderWithItems, { status: 201 }); // Return the created order with items
+        // --- End Prisma Logic ---
+    }
 
   } catch (error) {
     console.error('API Error creating order:', error);
@@ -142,7 +184,9 @@ export async function POST(request: Request) {
      if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2003') { // Foreign key constraint failed
              const fieldName = error.meta?.field_name as string | undefined;
-             const failedValue = fieldName?.includes('userId') ? (await request.clone().json()).userId : 'unknown';
+             // Clone request to read body again for error reporting
+             const requestBodyForError = await request.clone().json().catch(() => ({ userId: 'unknown' }));
+             const failedValue = fieldName?.includes('userId') ? requestBodyForError.userId : 'unknown';
              return NextResponse.json({ message: `Invalid reference: ${fieldName} with value ${failedValue} does not exist.` }, { status: 400 });
         }
         if (error.code === 'P2025') { // Record to update/delete not found (shouldn't happen on create, but maybe in transaction logic)

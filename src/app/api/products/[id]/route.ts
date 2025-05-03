@@ -1,6 +1,8 @@
 // src/app/api/products/[id]/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { useMock } from '@/lib/env'; // Import useMock flag
+import { mockProducts } from '@/app/api/products/route'; // Import mock products from the list endpoint
 
 type Params = {
   id: string;
@@ -17,14 +19,25 @@ export async function GET(request: Request, context: { params: Params }) {
   }
 
   try {
-    // Find the product by its numeric ID using Prisma
-    const product = await prisma.product.findUnique({
-      where: { id: numericId },
-    });
+    let product = null;
 
-    // If product not found, return 404
+    if (useMock) {
+      // --- Mock Logic ---
+      console.log(`API GET Product/${numericId}: Using mock data`);
+      product = mockProducts.find(p => p.id === numericId);
+      // --- End Mock Logic ---
+    } else {
+      // --- Prisma Logic ---
+      console.log(`API GET Product/${numericId}: Fetching from database`);
+      product = await prisma.product.findUnique({
+        where: { id: numericId },
+      });
+      // --- End Prisma Logic ---
+    }
+
+    // If product not found (in either mock or DB), return 404
     if (!product) {
-      return NextResponse.json({ message: 'Product not found' }, { status: 404 });
+      return NextResponse.json({ message: `Product with ID ${numericId} not found` }, { status: 404 });
     }
 
     // Return the found product
@@ -36,6 +49,6 @@ export async function GET(request: Request, context: { params: Params }) {
     const errorMessage = error instanceof Error ? error.message : `Failed to fetch product ${id}`;
     return NextResponse.json({ message: errorMessage }, { status: 500 });
   } finally {
-     // await prisma.$disconnect(); // Consider based on deployment
+     // if (!useMock) { await prisma.$disconnect(); } // Consider based on deployment
   }
 }

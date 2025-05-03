@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma'; // Import the Prisma client instance
 import type { LoginCredentials } from '@/services/auth-service'; // Reuse type
 import type { User as ApiUser } from '@/services/auth-service'; // Use the frontend User type definition
+import { useMock } from '@/lib/env'; // Import useMock flag
+import { findMockUserByEmail, mockUsers } from '@/lib/mockUsers'; // Import mock users
 
 export async function POST(request: Request) {
   try {
@@ -12,43 +14,67 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
     }
 
-    // Find user in the database
-    const user = await prisma.user.findUnique({
-      where: { email: email },
-    });
+    let user: ApiUser | null = null;
+    let isPasswordValid = false;
 
-    if (!user) {
-      console.log(`API Login Failed: User ${email} not found in DB`);
-      return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 }); // Unauthorized
+    if (useMock) {
+      // --- Mock Logic ---
+      console.log("API Login: Using mock data");
+      const mockUser = findMockUserByEmail(email);
+      if (mockUser && mockUser.password === password) {
+        user = mockUser;
+        isPasswordValid = true;
+        console.log(`API Login Success (Mock): User ${email} logged in`);
+      } else {
+        console.log(`API Login Failed (Mock): Invalid credentials for ${email}`);
+        return NextResponse.json({ message: 'Invalid email or password (Mock)' }, { status: 401 });
+      }
+      // --- End Mock Logic ---
+    } else {
+      // --- Prisma Logic ---
+      console.log("API Login: Using Prisma database");
+      const dbUser = await prisma.user.findUnique({
+        where: { email: email },
+      });
+
+      if (!dbUser) {
+        console.log(`API Login Failed (DB): User ${email} not found`);
+        return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 });
+      }
+
+      // Compare plaintext password (INSECURE - for dev only!)
+      isPasswordValid = (password === dbUser.password);
+
+      if (!isPasswordValid) {
+        console.log(`API Login Failed (DB): Invalid password for ${email}`);
+        return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 });
+      }
+
+       // Map Prisma user to the ApiUser type
+       user = {
+         id: dbUser.id,
+         name: dbUser.name,
+         email: dbUser.email,
+         isAdmin: dbUser.isAdmin,
+       };
+      console.log(`API Login Success (DB): User ${email} logged in`);
+      // --- End Prisma Logic ---
     }
 
-    // Compare plaintext password (INSECURE - for dev only!)
-    // In a real app, use bcrypt.compare() here
-    const isPasswordValid = (password === user.password);
+    // This part runs for both mock and Prisma if login is successful
+    if (user && isPasswordValid) {
+      // Generate a mock token
+      const mockToken = `mock-${useMock ? 'mock' : 'prisma'}-jwt-token-for-${user.id}-${Date.now()}`;
 
-    if (!isPasswordValid) {
-      console.log(`API Login Failed: Invalid password for ${email}`);
-      return NextResponse.json({ message: 'Invalid email or password' }, { status: 401 }); // Unauthorized
+      // Return token and user info
+      return NextResponse.json({
+          token: mockToken,
+          user: user // Send filtered user details back
+      });
     }
 
-    // Generate a mock token
-    const mockToken = `mock-prisma-jwt-token-for-${user.id}-${Date.now()}`;
-
-    console.log(`API Login Success: User ${email} logged in (from DB)`);
-
-    // Prepare user response object matching the frontend User type
-    const userResponse: ApiUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAdmin: user.isAdmin,
-    };
-
-    // Return token and user info
-    return NextResponse.json({
-        token: mockToken,
-        user: userResponse // Send filtered user details back
-    });
+    // Should not be reached if logic is correct, but acts as a fallback
+    return NextResponse.json({ message: 'Login failed due to an unexpected error' }, { status: 500 });
 
   } catch (error) {
     console.error('API Login Error:', error);
@@ -56,7 +82,7 @@ export async function POST(request: Request) {
     const errorMessage = error instanceof Error ? error.message : 'Internal server error during login';
     return NextResponse.json({ message: errorMessage }, { status: 500 });
   } finally {
-     // Ensure Prisma client is disconnected after the request in serverless environments
-     // await prisma.$disconnect(); // Consider if needed based on deployment strategy
+     // Ensure Prisma client is disconnected after the request in serverless environments (only if not using mock)
+     // if (!useMock) { await prisma.$disconnect(); } // Consider if needed based on deployment strategy
   }
 }
