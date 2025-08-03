@@ -1,169 +1,299 @@
-# Comic Marketplace 🛒
+# 📚 Next Comic Store - Marketplace de Quadrinhos
 
-A Next.js application allowing users to browse comic samples, request custom comics by uploading images, and simulate a checkout process. Includes an admin panel for managing custom orders.
+## 🎯 Objetivo de Aprendizado
+Projeto desenvolvido para estudar **Next.js 14** com **App Router**, **Prisma ORM**, **TypeScript** e **shadcn/ui**, criando um marketplace completo de quadrinhos com autenticação, carrinho de compras, painel admin e upload de imagens.
 
-## 📘 Project Overview
+## 🛠️ Tecnologias Utilizadas
+- **Framework:** Next.js 14 (App Router)
+- **Linguagem:** TypeScript
+- **Styling:** Tailwind CSS + shadcn/ui
+- **ORM:** Prisma
+- **Banco de Dados:** SQLite
+- **Estado:** React Context API
+- **Data Fetching:** TanStack React Query
+- **Conceitos estudados:**
+  - Next.js App Router e Server Components
+  - Prisma ORM e migrations
+  - shadcn/ui component system
+  - Context API para estado global
+  - API Routes e backend integration
+  - Upload de arquivos e storage
 
-Comic Marketplace is a web application where users can explore a gallery of predefined comic book samples or request a unique, customized comic. Users can upload their own images and add notes for customization requests. The app features a shopping cart, a simulated checkout process, and a user profile section to view past orders. An admin panel allows administrators to view and manage the status of custom comic orders.
+## 🚀 Demonstração
+```tsx
+// API Route com Prisma
+export async function GET() {
+  try {
+    const products = await prisma.product.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    return NextResponse.json(products);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch products' },
+      { status: 500 }
+    );
+  }
+}
 
-**Key Features:**
+// Server Component com dados
+async function ProductsPage() {
+  const products = await prisma.product.findMany();
+  
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {products.map((product) => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </div>
+  );
+}
 
--   Browse and view details of sample comic products.
--   Submit a request for a custom comic, including image upload and notes.
--   Shopping cart functionality for both sample and custom items.
--   Simulated checkout and order placement.
--   User authentication (login/register) with mock token persistence.
--   "My Orders" page for authenticated users to view their order history.
--   Admin panel (`/admin/orders`) to view and manage the status of custom orders (accessible only to admin users).
--   Responsive design optimized for various screen sizes.
+// Context para carrinho
+const CartContext = createContext<CartContextType>({} as CartContextType);
 
-## 🧰 Tech Stack
+export const useCart = () => {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error('useCart must be used within CartProvider');
+  }
+  return context;
+};
+```
 
--   **Framework**: [Next.js](https://nextjs.org/) (using App Router)
--   **Language**: [TypeScript](https://www.typescriptlang.org/)
--   **Styling**: [Tailwind CSS](https://tailwindcss.com/) with [shadcn/ui](https://ui.shadcn.com/) components
--   **ORM**: [Prisma](https://www.prisma.io/)
--   **Database**: [SQLite](https://www.sqlite.org/index.html)
--   **State Management**: React Context API (`useAuth`, `useCart`)
--   **Data Fetching**: React Query (`@tanstack/react-query`) for client-side fetching, API Routes for backend logic.
+## 💡 Principais Aprendizados
 
-## 🚀 Getting Started
+### ⚡ Next.js 14 App Router
+- **Server Components:** Renderização no servidor
+- **Client Components:** Interatividade no cliente
+- **API Routes:** Backend integrado
+- **File-based Routing:** Roteamento automático
+- **Layouts:** Layouts aninhados e compartilhados
 
-Follow these steps to set up and run the project locally.
+### 🗄️ Prisma ORM
+- **Schema Definition:** Modelagem de dados
+- **Migrations:** Controle de versão do banco
+- **Client Generation:** Type-safe database access
+- **Seeding:** População inicial de dados
 
-### Requirements
+### 🎨 shadcn/ui + Tailwind
+- **Component System:** Componentes reutilizáveis
+- **Design System:** Consistência visual
+- **Responsive Design:** Mobile-first approach
+- **Dark Mode:** Suporte a temas
 
--   [Node.js](https://nodejs.org/) (v18 or later recommended)
--   [npm](https://www.npmjs.com/) (or [yarn](https://yarnpkg.com/))
+## 🧠 Conceitos Técnicos Estudados
 
-### Installation
+### 1. **Prisma Schema**
+```prisma
+model Product {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  price       Float
+  imageUrl    String?
+  type        String   @default("sample")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  orderItems  OrderItem[]
+  
+  @@map("products")
+}
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd comic-marketplace
-    ```
+model User {
+  id       Int     @id @default(autoincrement())
+  name     String
+  email    String  @unique
+  password String
+  isAdmin  Boolean @default(false)
+  
+  orders   Order[]
+  
+  @@map("users")
+}
+```
 
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    # or
-    # yarn install
-    ```
+### 2. **Server Actions**
+```tsx
+// Server Action para criar pedido
+async function createOrder(formData: FormData) {
+  'use server';
+  
+  const userId = formData.get('userId') as string;
+  const items = JSON.parse(formData.get('items') as string);
+  
+  const order = await prisma.order.create({
+    data: {
+      userId: parseInt(userId),
+      status: 'pending',
+      total: calculateTotal(items),
+      orderItems: {
+        create: items.map((item: any) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price
+        }))
+      }
+    },
+    include: {
+      orderItems: {
+        include: {
+          product: true
+        }
+      }
+    }
+  });
+  
+  return order;
+}
+```
 
-### Database Setup & Seeding
+### 3. **Context API com TypeScript**
+```tsx
+interface CartContextType {
+  items: CartItem[];
+  addItem: (product: Product) => void;
+  removeItem: (productId: number) => void;
+  updateQuantity: (productId: number, quantity: number) => void;
+  clearCart: () => void;
+  total: number;
+}
 
-1.  **Generate Prisma Client:** Prisma Client is usually generated automatically after `npm install` (due to the `postinstall` script), but you can run it manually if needed:
-    ```bash
-    npx prisma generate
-    ```
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [items, setItems] = useState<CartItem[]>([]);
+  
+  const addItem = useCallback((product: Product) => {
+    setItems(prev => {
+      const existingItem = prev.find(item => item.product.id === product.id);
+      if (existingItem) {
+        return prev.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  }, []);
+  
+  const total = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  }, [items]);
+  
+  return (
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, total }}>
+      {children}
+    </CartContext.Provider>
+  );
+};
+```
 
-2.  **Apply Migrations:** This will create the SQLite database file (`data/database.sqlite`) and apply the schema.
-    ```bash
-    npx prisma migrate dev --name init
-    ```
-    *(You might be prompted to reset the database if it already exists)*
+## 📁 Estrutura do Projeto
+```
+next-comic-store/
+├── app/
+│   ├── (auth)/             # Grupo de rotas de autenticação
+│   ├── admin/              # Painel administrativo
+│   ├── api/                # API Routes
+│   ├── products/           # Páginas de produtos
+│   ├── cart/               # Carrinho de compras
+│   └── layout.tsx          # Layout principal
+├── components/
+│   ├── ui/                 # Componentes shadcn/ui
+│   ├── cart/               # Componentes do carrinho
+│   └── products/           # Componentes de produtos
+├── lib/
+│   ├── prisma.ts           # Cliente Prisma
+│   ├── auth.ts             # Utilitários de auth
+│   └── utils.ts            # Utilitários gerais
+├── prisma/
+│   ├── schema.prisma       # Schema do banco
+│   ├── seed.ts             # Dados iniciais
+│   └── migrations/         # Migrações
+└── data/
+    └── database.sqlite     # Banco SQLite
+```
 
-3.  **Seed the database:** This script populates the database with initial sample users, products, and an example order.
-    ```bash
-    npx prisma db seed
-    ```
-    *(Requires `tsx` to run, which should be in devDependencies)*
+## 🔧 Como Executar
 
-### Running the Development Server
+### Pré-requisitos
+- Node.js 18+
+- npm ou yarn
 
-Start the Next.js development server:
-
+### Instalação
 ```bash
+# Clone o repositório
+git clone <repo-url>
+cd next-comic-store
+
+# Instale dependências
+npm install
+
+# Configure o banco de dados
+npx prisma migrate dev --name init
+npx prisma db seed
+
+# Inicie o servidor
 npm run dev
-# or
-# yarn dev
 ```
 
-The application will typically be available at [http://localhost:9002](http://localhost:9002) (or another port if 9002 is busy).
-
-## 🌐 API Routes
-
-The application uses Next.js API Routes (under `/app/api/`) to simulate a backend:
-
--   `/api/products`:
-    -   `GET`: Fetches all available comic products.
--   `/api/products/[id]`:
-    -   `GET`: Fetches details for a specific product by its ID.
--   `/api/orders`:
-    -   `GET`: Fetches orders (can be filtered by `userId` or `custom=true`).
-    -   `POST`: Creates a new order.
--   `/api/orders/[orderId]/status`:
-    -   `PATCH`: Updates the status of a specific order.
--   `/api/auth/login`:
-    -   `POST`: Handles user login (validates against DB, returns mock token).
--   `/api/auth/register`:
-    -   `POST`: Handles user registration (creates user in DB, returns mock token).
--   `/api/upload`:
-    -   `POST`: Simulates image upload and returns a placeholder image URL.
-
-These routes interact with the SQLite database via Prisma.
-
-## 👨‍💻 Local Development Notes
-
--   The development server runs on port `9002` by default (configurable in `package.json`).
--   Authentication uses a mock token stored in `localStorage`. Passwords are currently stored in plain text in the database (for development purposes only).
--   Admin access is determined by the `isAdmin` flag on the `User` model.
-
-## ✅ Authentication
-
--   Basic email/password authentication is implemented.
--   Login and Registration forms are available.
--   Successful authentication stores a mock token and user info in `localStorage`.
--   The `useAuth` hook provides global access to the user's authentication state.
--   Passwords are **not hashed** in this development version.
-
-## 🗃️ Prisma & Database
-
--   Prisma is used as the ORM to interact with the SQLite database.
--   The database schema is defined in `prisma/schema.prisma`.
--   The SQLite database file is located at `data/database.sqlite`. Make sure the `data` directory exists or Prisma can create it.
--   Migrations are managed using `npx prisma migrate dev`.
-
-## 📷 Image Upload
-
--   The `/api/upload` endpoint currently **mocks** the image upload process.
--   It simulates a delay and returns a placeholder image URL from `picsum.photos`.
--   A real storage solution (like Firebase Storage, Cloudinary, or S3) would be needed for a production environment.
-
-## 🧪 Mock Mode
-
-To simulate API data without requiring a real database, you can enable **Mock Mode**:
-
-1. Open the `.env` file
-2. Add or edit the following line:
-   ```env
-   USE_MOCK=true
-   ```
-3. Restart the development server (`npm run dev`).
-
-When `USE_MOCK=true`, the API routes (`/api/auth/login`, `/api/orders`, etc.) will use hardcoded mock data from `src/lib/mockUsers.ts` and `src/lib/mockOrders.ts` instead of interacting with the Prisma database.
-
-**Mock User Credentials:**
-- **Admin:** `admin.mock@comichub.com` / `password`
-- **Regular User:** `test.mock@example.com` / `password`
-
-This is useful for frontend development or testing without needing the database running. To switch back to using the real database, set `USE_MOCK=false` or remove the line from `.env`.
-
-
-## 🧪 Prisma Studio
-
-You can use Prisma Studio to visually browse and manage the data in your SQLite database:
-
+### Modo Mock (Desenvolvimento)
 ```bash
-npx prisma studio
+# Crie arquivo .env
+echo "USE_MOCK=true" > .env
+
+# Reinicie o servidor
+npm run dev
 ```
 
-This will open a web interface, usually at `http://localhost:5555`.
+**Credenciais Mock:**
+- **Admin:** admin.mock@comichub.com / password
+- **Usuário:** test.mock@example.com / password
 
-## 📦 Deployment
+## 🎯 Funcionalidades Implementadas
+- ✅ **Catálogo de produtos** com detalhes
+- ✅ **Carrinho de compras** funcional
+- ✅ **Autenticação** (login/registro)
+- ✅ **Painel admin** para pedidos
+- ✅ **Upload de imagens** (simulado)
+- ✅ **Histórico de pedidos** do usuário
+- ✅ **Checkout** simulado
+- ✅ **Design responsivo** mobile-first
 
-*(Placeholder - Add deployment instructions here when applicable)*
+## 🚧 Desafios Enfrentados
+1. **App Router:** Migração de Pages para App Router
+2. **Server vs Client Components:** Entender quando usar cada um
+3. **Prisma Setup:** Configuração de schema e migrations
+4. **TypeScript:** Tipagem complexa com Prisma
+5. **State Management:** Context API vs Server State
+6. **File Upload:** Simulação de upload de imagens
 
-Instructions for deploying this Next.js application to platforms like Vercel, Netlify, or others would go here. Considerations for database hosting and environment variables would also be included.
+## 📚 Recursos Utilizados
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [shadcn/ui Components](https://ui.shadcn.com/)
+- [TanStack Query](https://tanstack.com/query/latest)
+- [Tailwind CSS](https://tailwindcss.com/docs)
 
+## 📈 Próximos Passos
+- [ ] Implementar autenticação com NextAuth.js
+- [ ] Adicionar sistema de pagamento (Stripe)
+- [ ] Implementar upload real de imagens (Cloudinary)
+- [ ] Adicionar testes (Jest + Testing Library)
+- [ ] Implementar notificações em tempo real
+- [ ] Deploy na Vercel com PostgreSQL
+
+## 🔗 Projetos Relacionados
+- [React E-commerce](../react-ecommerce-tt/) - Comparação com React puro
+- [Spring E-commerce](../spring-ecommerce-tt/) - Backend Java
+- [HTML Supplement E-commerce](../html-supplement-ecommerce/) - Fundamentos web
+
+---
+
+**Desenvolvido por:** Felipe Macedo  
+**Contato:** contato.dev.macedo@gmail.com  
+**GitHub:** [FelipeMacedo](https://github.com/felipemacedo1)  
+**LinkedIn:** [felipemacedo1](https://linkedin.com/in/felipemacedo1)
+
+> 💡 **Reflexão:** Este projeto consolidou meus conhecimentos em Next.js 14 e suas novas funcionalidades. A experiência com App Router, Server Components e Prisma estabeleceu bases sólidas para desenvolvimento full-stack moderno.
